@@ -1,0 +1,152 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library("RColorBrewer")
+library("data.table")
+library("ggpubr")
+library("ggplot2")
+library("Seurat")
+library("stringr")
+library("pheatmap")
+
+fetal <- readRDS("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCluster/fetalcortex.rds")
+
+library(velocyto.R)
+library(SeuratWrappers)
+library(hdf5r)
+table(fetal$orig.ident)
+da094_loom <- ReadVelocity("/Volumes/MyPassport/FetalCortex/Dec2020/1_counts/DA094/velocyto/DA094.loom")
+da103_loom <- ReadVelocity("/Volumes/MyPassport/FetalCortex/Dec2020/1_counts/DA103/velocyto/DA103.loom")
+da140_loom <- ReadVelocity("/Volumes/MyPassport/FetalCortex/Dec2020/1_counts/DA140/velocyto/DA140.loom")
+seq095_2_loom <- ReadVelocity("/Volumes/MyPassport/FetalCortex/Dec2020/1_counts/Seq095_2/velocyto/Seq095_2.loom")
+seq098_2_loom <- ReadVelocity("/Volumes/MyPassport/FetalCortex/Dec2020/1_counts/Seq098_2/velocyto/Seq098_2.loom")
+# loom <- ReadVelocity("/Volumes/My Passport/FetalCortex/Dec2020/1_counts/DA094_DA103_DA140_Seq095_2_Seq098_2.loom")
+
+sample_looms <- list("da094" = da094_loom, "da103" = da103_loom, "da140" = da140_loom, "seq095_2" = seq095_2_loom, "seq098_2" = seq098_2_loom)
+
+colnames(sample_looms$da094[["spliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da094[["spliced"]])))
+colnames(sample_looms$da094[["unspliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da094[["unspliced"]])))
+colnames(sample_looms$da094[["ambiguous"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da094[["ambiguous"]])))
+
+colnames(sample_looms$da103[["spliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da103[["spliced"]])))
+colnames(sample_looms$da103[["unspliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da103[["unspliced"]])))
+colnames(sample_looms$da103[["ambiguous"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da103[["ambiguous"]])))
+
+colnames(sample_looms$da140[["spliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da140[["spliced"]])))
+colnames(sample_looms$da140[["unspliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da140[["unspliced"]])))
+colnames(sample_looms$da140[["ambiguous"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$da140[["ambiguous"]])))
+
+colnames(sample_looms$seq095_2[["spliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$seq095_2[["spliced"]])))
+colnames(sample_looms$seq095_2[["unspliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$seq095_2[["unspliced"]])))
+colnames(sample_looms$seq095_2[["ambiguous"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$seq095_2[["ambiguous"]])))
+
+colnames(sample_looms$seq098_2[["spliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$seq098_2[["spliced"]])))
+colnames(sample_looms$seq098_2[["unspliced"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$seq098_2[["unspliced"]])))
+colnames(sample_looms$seq098_2[["ambiguous"]]) <- gsub("x", "-1", gsub(":", "_", colnames(sample_looms$seq098_2[["ambiguous"]])))
+
+table(c(colnames(sample_looms$da094[["spliced"]]),
+colnames(sample_looms$da094[["unspliced"]]),
+colnames(sample_looms$da094[["ambiguous"]]),
+colnames(sample_looms$da103[["spliced"]]),
+colnames(sample_looms$da103[["unspliced"]]),
+colnames(sample_looms$da103[["ambiguous"]]),
+colnames(sample_looms$da140[["spliced"]]),
+colnames(sample_looms$da140[["unspliced"]]),
+colnames(sample_looms$da140[["ambiguous"]]),
+colnames(sample_looms$seq095_2[["spliced"]]),
+colnames(sample_looms$seq095_2[["unspliced"]]),
+colnames(sample_looms$seq095_2[["ambiguous"]]),
+colnames(sample_looms$seq098_2[["spliced"]]),
+colnames(sample_looms$seq098_2[["unspliced"]]),
+colnames(sample_looms$seq098_2[["ambiguous"]])) %in% colnames(fetal))
+
+
+loom_aggregate <- list()
+loom_aggregate[["spliced"]] <- cbind(sample_looms$da094$spliced, sample_looms$da103$spliced, sample_looms$da140$spliced, sample_looms$seq095_2$spliced, sample_looms$seq098_2$spliced)
+loom_aggregate[["unspliced"]] <- cbind(sample_looms$da094$unspliced, sample_looms$da103$unspliced, sample_looms$da140$unspliced, sample_looms$seq095_2$unspliced, sample_looms$seq098_2$unspliced)
+
+vel <- CreateSeuratObject(counts = loom_aggregate$spliced,
+                          assay = "spliced",
+                          min.cells = 0,
+                          min.features = 0,
+                          names.field = 2,
+                          names.delim = "\\-")
+vel[["unspliced"]] <- CreateAssayObject(counts = loom_aggregate$unspliced)
+
+vel
+fetal
+length(which(is.element(colnames(fetal), colnames(vel))))
+
+vel <- vel[rownames(fetal), colnames(fetal)]
+vel_integrated <- vel
+# nearest neighbor graph
+vel_integrated@graphs[["RNA_nn"]] <- fetal@graphs[["RNA_nn"]][colnames(vel),
+                                                            colnames(vel)]
+# UMAP
+vel_integrated@reductions[["umap"]] <- CreateDimReducObject(embeddings = as.matrix(FetchData(fetal, vars = c("UMAP_1", "UMAP_2"), cells = colnames(vel))), assay = "RNA")
+
+vel_integrated@reductions[["pca"]] <- CreateDimReducObject(embeddings = as.matrix(FetchData(fetal, vars = paste("PC_", 1:50, sep=""), cells = colnames(vel))), assay = "RNA")
+
+vel_integrated <- RunVelocity(vel_integrated,
+                             deltaT = 1,
+                             kCells = 25,
+                             fit.quantile = 0.02,
+                             verbose = FALSE)
+
+
+
+# Cell type colours
+coldata_celltypes <- reshape2::melt(list("Early born neurons" = as.character(c(2,4)),
+                    "Basal progenitors" = as.character(c(1,5)),
+                    "Apical progenitors" = as.character(c(0,3,6,9)),
+                    "Interneurons" = as.character(c(7)),
+                    "Cajal Retzius" = as.character(c(8)),
+                    "Microglia" = as.character(c(10))))
+
+colnames(coldata_celltypes) <- c("cluster", "cellType")
+cellType_colours <- c("#3e80a5", "#5a9c82", "#3f5e48", "#5f9cd2", "#658795", "#6cbcc0")
+names(cellType_colours) <- c("Early born neurons", "Basal progenitors", 
+                             "Apical progenitors", "Interneurons", 
+                             "Cajal Retzius", "Microglia")
+cellType_colours <- data.frame("colour" = cellType_colours)
+cellType_colours$cellType <- rownames(cellType_colours)
+
+coldata_celltypes <- merge(coldata_celltypes, cellType_colours, by="cellType")
+
+# Add cell type to Seurat metadata
+tmp <- data.frame(cluster = fetal$seurat_clusters)
+tmp$cellId <- rownames(tmp) 
+tmp <- merge(tmp, coldata_celltypes)
+rownames(tmp) <- tmp$cellId
+cellType_colours_vector <- tmp[,"colour"]
+names(cellType_colours_vector) <- rownames(tmp)
+
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/October2022/velocity_fetal.pdf")
+show.velocity.on.embedding.cor(emb = Embeddings(vel_integrated,
+                                                reduction = "umap"),
+                               vel = Tool(vel_integrated,
+                                          slot = "RunVelocity"),
+                               n = 200,
+                               scale = "sqrt",
+                               xlab = colnames(Embeddings(vel_integrated,
+                                                          reduction = "umap"))[1],
+                               ylab = colnames(Embeddings(vel_integrated,
+                                                          reduction = "umap"))[2],
+                               cell.colors = ac(x = cellType_colours_vector, alpha = 1),
+                               cex = 1,
+                               arrow.scale = 3,
+                               show.grid.flow = TRUE,
+                               min.grid.cell.mass = 0.5,
+                               grid.n = 40,
+                               arrow.lwd = 1,
+                               do.par = FALSE,
+                               cell.border.alpha = 0)
+dev.off()
+```
