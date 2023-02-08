@@ -1,0 +1,20 @@
+samples:
+    - CR118_DA817_H3K4me3_S16
+    - CR118_DA817_IgG_S15
+    - CR119_DA822_H3K4me3_S19
+    - CR119_DA822_IgG_S18
+h3k4_noIgG:
+    - CR118_DA817_H3K4me3_S16
+    - CR119_DA822_H3K4me3_S19
+h3k4:
+    - CR118_DA817_H3K4me3_S16
+    - CR118_DA817_IgG_S15
+    - CR119_DA822_H3K4me3_S19
+    - CR119_DA822_IgG_S18
+rna:
+    - HuEmCtx_40mm_190611_bulkA_S2
+    - HuEmCtx_40mm_190611_bulkB_S3
+    - HuEmCtxfresh40mm10-5w_201029_bulk_S23
+    - HuEmCtxfresh7w4d_190416_bulk_DA103_S1
+    - HuEmCtxfresh8w_190319_bulk_DA094_S21
+    - HuEmCtxfresh8w6d_190416_bulk_DA140_S22

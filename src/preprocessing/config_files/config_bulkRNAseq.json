@@ -1,0 +1,87 @@
+{
+	"samples":
+	{
+	"HuEmCtx_40mm_190611_bulkA_S2" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtx_40mm_190611_bulkA_S2",
+	"HuEmCtx_40mm_190611_bulkB_S3" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtx_40mm_190611_bulkB_S3",
+	"HuEmCtxfresh40mm10-5w_201029_bulk_S23" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh40mm10-5w_201029_bulk_S23",
+	"HuEmCtxfresh7w4d_190416_bulk_DA103_S1" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh7w4d_190416_bulk_DA103_S1",
+	"HuEmCtxfresh8w_190319_bulk_DA094_S21" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh8w_190319_bulk_DA094_S21",
+	"HuEmCtxfresh8w6d_190416_bulk_DA140_S22" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh8w6d_190416_bulk_DA140_S22",    
+	"TBI_HuBrainCTL_Nuclei_501F_bulk_S4" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_501F_bulk_S4",
+	"TBI_HuBrainCTL_Nuclei_501T_bulk_S5" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_501T_bulk_S5",
+	"TBI_HuBrainCTL_Nuclei_502F_bulk_S6" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_502F_bulk_S6",
+	"TBI_HuBrainCTL_Nuclei_502T_bulk_S7" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_502T_bulk_S7",
+	"TBI_HuBrainCTL_Nuclei_529F_bulk_S8" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_529F_bulk_S8",
+	"TBI_HuBrainCTL_Nuclei_529T_bulk_S9" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_529T_bulk_S9",
+	"LV3599_1_h6_NPCday14_S20" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_1_h6_NPCday14_S9" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_2_h6_NPCday14_S10" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_2_h6_NPCday14_S21" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_3_h6_NPCday14_S11" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_3_h6_NPCday14_S22" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_4_h6_NPCday14_S23" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3627_1_h6_NPCday14_S12" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3627_2_h6_NPCday14_S17" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3627_3_h6_NPCday14_S13" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3628_1_h6_NPCday14_S14" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3628_2_h6_NPCday14_S18" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3628_3_h6_NPCday14_S15" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3629_2_h6_NPCday14_S19" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3629_3_h6_NPCday14_S16" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"259" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"271" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA3" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA4" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"260" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"272" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA1" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA2" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc"
+	},
+	"fetal":
+	{
+	"HuEmCtx_40mm_190611_bulkA_S2" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtx_40mm_190611_bulkA_S2",
+	"HuEmCtx_40mm_190611_bulkB_S3" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtx_40mm_190611_bulkB_S3",
+	"HuEmCtxfresh40mm10-5w_201029_bulk_S23" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh40mm10-5w_201029_bulk_S23",
+	"HuEmCtxfresh7w4d_190416_bulk_DA103_S1" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh7w4d_190416_bulk_DA103_S1",
+	"HuEmCtxfresh8w_190319_bulk_DA094_S21" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh8w_190319_bulk_DA094_S21",
+	"HuEmCtxfresh8w6d_190416_bulk_DA140_S22" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/HuEmCtxfresh8w6d_190416_bulk_DA140_S22"    
+	},
+	"adult":
+	{
+	"TBI_HuBrainCTL_Nuclei_501F_bulk_S4" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_501F_bulk_S4",
+	"TBI_HuBrainCTL_Nuclei_501T_bulk_S5" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_501T_bulk_S5",
+	"TBI_HuBrainCTL_Nuclei_502F_bulk_S6" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_502F_bulk_S6",
+	"TBI_HuBrainCTL_Nuclei_502T_bulk_S7" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_502T_bulk_S7",
+	"TBI_HuBrainCTL_Nuclei_529F_bulk_S8" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_529F_bulk_S8",
+	"TBI_HuBrainCTL_Nuclei_529T_bulk_S9" : "/projects/fs5/jakobssonlab/CTG_JGJSeq120_122/210607_A00681_0387_AHCVJTDRXY/Data/Intensities/BaseCalls/Seq120/TBI_HuBrainCTL_Nuclei_529T_bulk_S9"
+	},
+	"linc01876_crispri":
+	{
+	"LV3599_1_h6_NPCday14_S20" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_1_h6_NPCday14_S9" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_2_h6_NPCday14_S10" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_2_h6_NPCday14_S21" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_3_h6_NPCday14_S11" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_3_h6_NPCday14_S22" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3599_4_h6_NPCday14_S23" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3627_1_h6_NPCday14_S12" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3627_2_h6_NPCday14_S17" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3627_3_h6_NPCday14_S13" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3628_1_h6_NPCday14_S14" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3628_2_h6_NPCday14_S18" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3628_3_h6_NPCday14_S15" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3629_2_h6_NPCday14_S19" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles",
+	"LV3629_3_h6_NPCday14_S16" : "/projects/fs5/jakobssonlab/Seq092_Diahann/FastQFiles"  
+	},
+	"fbNPCs":
+	{
+	"259" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"271" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA3" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA4" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"260" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"272" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA1" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc",
+	"mRNA2" : "/projects/fs5/jakobssonlab/ZNF558_GEO/RNAseq_fbnpc"
+	}
+}

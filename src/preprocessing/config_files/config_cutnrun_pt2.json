@@ -1,0 +1,14 @@
+{
+    "cutnrun":
+    {
+        "CR118_DA817_H3K4me3_S16" : "CR118_DA817_IgG_S15",
+        "CR119_DA822_H3K4me3_S19" : "CR119_DA822_IgG_S18",
+        "CR118_DA817_H3K9me3_S17" : "CR118_DA817_IgG_S15",
+        "CR119_DA822_H3K9me3_S20" : "CR119_DA822_IgG_S18"
+    },
+    "h3k4_paired":
+    {
+        "CR118_DA817_H3K4me3_S16" : "CR118_DA817_IgG_S15",
+        "CR119_DA822_H3K4me3_S19" : "CR119_DA822_IgG_S18"
+    } 
+}

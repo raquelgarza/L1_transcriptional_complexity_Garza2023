@@ -1,0 +1,146 @@
+{
+  "__default__" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "00:15:00",
+      "nodes" : 1,
+      "partition" : "dell",
+      "tasks-per-node" : 10,
+      "output" : "%j.out",
+      "error" : "%j.err",
+      "job-name" : "%j"
+  },
+  "filterStrands" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "05:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.filterStrand.out",
+      "error" : "%j.filterStrand.err",
+      "job-name" : "%j.filterStrand"
+  },
+  "uniquemapping" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "05:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.map.out",
+      "error" : "%j.map.err",
+      "job-name" : "%j.map"
+  },
+  "mapping" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "05:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.map.out",
+      "error" : "%j.map.err",
+      "job-name" : "%j.map"
+  },
+  "multimapping" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "05:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.map.out",
+      "error" : "%j.map.err",
+      "job-name" : "%j.map"
+  },
+  "indexing" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "01:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 10,
+      "partition" : "dell",
+      "output" : "%j.index.out",
+      "error" : "%j.index.err",
+      "job-name" : "%j.index"
+  },
+  "bigwig" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "10:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 10,
+      "partition" : "dell",
+      "output" : "%j.bigwig.out",
+      "error" : "%j.bigwig.err",
+      "job-name" : "%j.bigwig"
+  },
+ "gene_quantification" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "10:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.gene_quant.out",
+      "error" : "%j.gene_quant.err",
+      "job-name" : "%j.gene_quant"
+  },
+  "TE_quantification_per_strand" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "10:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.TEcount.out",
+      "error" : "%j.TEcount.err",
+      "job-name" : "%j.TEcount"
+  },
+  "ORF0_quantification" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "10:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.ORF0_quantification.out",
+      "error" : "%j.ORF0_quantification.err",
+      "job-name" : "%j.ORF0_quantification"
+  },
+  "TE_quantification" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "10:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.TEcount.out",
+      "error" : "%j.TEcount.err",
+      "job-name" : "%j.TEcount"
+  },
+  "TEcounts" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "20:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.TEcount.out",
+      "error" : "%j.TEcount.err",
+      "job-name" : "%j.TEcount"
+  },
+  "matrix_FL_L1PAs" :
+  {
+      "account" : "lsens2018-3-3",
+      "time" : "02:00:00",
+      "nodes" : 1,
+      "tasks-per-node" : 20,
+      "partition" : "dell",
+      "output" : "%j.matrix_FL_L1PAs.out",
+      "error" : "%j.matrix_FL_L1PAs.err",
+      "job-name" : "%j.matrix_FL_L1PAs"
+  }
+
+}
