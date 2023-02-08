@@ -1,0 +1,230 @@
+# -*- coding: utf-8 -*-
+import os
+
+WD = "/projects/fs3/raquelgg/JGJSeq169_145cutorun/"
+RD = "/projects/fs5/jakobssonlab/JGJSeq169_145cutorun/220505_NB502004_0186_AHNMJFBGXL/Data/Intensities/BaseCalls/"
+RNA_DIR = "/projects/fs3/raquelgg/CTG_JGJSeq120_122/"
+configfile: os.path.join(WD, "src/config_files/config_cutnrun_pt1.yaml") # I've included a sample config file. Same pipeline was used for the adult dataset.
+
+SAMPLES = config["samples"]
+RNA = config["rna"]
+H3K4ME3 = config["h3k4"]
+H3K4ME3_noIgG = config["h3k4_noIgG"]
+geneGTF = "/projects/fs3/raquelgg/annotations/hg38/gencode/v38/gencode.v38.annotation.gtf"
+bowtie2Index = "/projects/fs1/common/genome/lunarc/indicies/bowtie2/human/hg38/hg38"
+
+# Run as:
+# snakemake -j 5 --cluster-config /path/to/server/config/file.json --cluster "sbatch -A {cluster.account} -p {cluster.partition} --tasks-per-node {cluster.tasks-per-node}  -t {cluster.time} -o {cluster.o} -e {cluster.e} -J {cluster.J} -N {cluster.N}" --latency-wait 60
+
+rule all:
+    input: 
+         expand(os.path.join(WD, "2_tagdirs/{sample}_tagdir/tagInfo.txt"), sample=H3K4ME3),
+         # Uncomment the following lines in the second run (after the peak calling)
+         # os.path.join(WD, "deeptools/L1PA2_common_peaks_positive.bed"),
+         # os.path.join(WD, "deeptools/L1PA3_common_peaks_positive.bed"),
+         # os.path.join(WD, "deeptools/L1PA4_common_peaks_positive.bed"),
+         # os.path.join(WD, "deeptools/L1HS_common_peaks_negative.bed"),
+         # os.path.join(WD, "deeptools/L1PA2_common_peaks_negative.bed"),
+         # os.path.join(WD, "deeptools/L1PA3_common_peaks_negative.bed"),
+         # os.path.join(WD, "deeptools/L1PA4_common_peaks_negative.bed"),
+         # os.path.join(WD, "deeptools/positive_L1HS_L1PA2_L1PA3_L1PA4_peaks_rnaseq.mtx"),
+         # os.path.join(WD, "deeptools/negative_L1HS_L1PA2_L1PA3_L1PA4_peaks_rnaseq.mtx")
+
+rule trim:
+    input:
+        r1 = os.path.join(RD, "{sample}_R1_001.fastq.gz"),
+        r2 = os.path.join(RD, "{sample}_R2_001.fastq.gz")
+    output:
+        r1 = os.path.join(RD, "trimmed/{sample}_R1_001_TR.fastq.gz"),
+        r2 = os.path.join(RD, "trimmed/{sample}_R2_001_TR.fastq.gz")
+    params:
+        outdir = os.path.join(RD, "trimmed")
+    shell:
+        """
+        ml GCCcore/10.3.0 cutadapt/3.4
+
+        mkdir -p {params.outdir}
+
+        cutadapt -q 10 -a AGATCGGAAGAG -A AGATCGGAAGAG -o {output.r1} -p {output.r2} {input.r1} {input.r2}
+
+        """
+
+rule fastqc:
+    input:
+        r1 = os.path.join(RD, "trimmed/{sample}_R1_001_TR.fastq.gz"),
+        r2 = os.path.join(RD, "trimmed/{sample}_R2_001_TR.fastq.gz")
+    output:
+        r1 = os.path.join(RD, "trimmed/{sample}_R1_001_TR_fastqc.html"),
+        r2 = os.path.join(RD, "trimmed/{sample}_R2_001_TR_fastqc.html")
+    shell:
+        """
+        ml fastqc/0.11.3
+
+        fastqc {input}
+        """
+
+rule mapping:
+    input:
+        r1 = os.path.join(RD, "trimmed/{sample}_R1_001_TR.fastq.gz"),
+        r2 = os.path.join(RD, "trimmed/{sample}_R2_001_TR.fastq.gz")
+    output:
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sam")
+    params:
+        index = bowtie2Index
+    shell:
+        """
+        ml GCC/7.3.0-2.30 OpenMPI/3.1.1 Bowtie2/2.3.4.2
+
+        bowtie2 --local --very-sensitive-local --no-unal --no-mixed --no-discordant --phred33 -I 10 -X 700 -x {params.index} -1 {input.r1} -2 {input.r2} -S {output}
+
+        module purge
+        """
+
+rule sam_filtering:
+    input:
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sam")
+    output:
+        sam = os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sam"),
+        statsU = os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.stats"),
+        statsM = os.path.join(WD, "1_mapping/unfiltered/{sample}.orig.stats"),
+    shell:
+        """
+        ml GCC/5.4.0-2.26  OpenMPI/1.10.3
+        ml SAMtools/1.4
+
+        # Filter MAPQ >10 to get unique reads
+        samtools view -q 10 -h {input} > {output.sam}
+
+        # Stats unique reads
+        samtools stats {output.sam} > {output.statsU}
+
+        # Stats all mapped reads
+        samtools stats {input} > {output.statsM}
+        """
+
+rule sam_to_bam:
+    input:
+        samU = os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sam"),
+        samOrig = os.path.join(WD, "1_mapping/unfiltered/{sample}.sam")
+    output:
+        bamM = os.path.join(WD, "1_mapping/unfiltered/{sample}.bam"),
+        bamU = os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.bam")
+    shell: 
+        """
+        ml GCC/5.4.0-2.26  OpenMPI/1.10.3
+        ml SAMtools/1.4
+        
+        # Convert to bam
+        samtools view -Sb {input.samOrig} > {output.bamM}
+        samtools view -Sb {input.samU} > {output.bamU}
+        """
+
+rule sorting:
+    input:
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.bam")
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.bam")
+    output:
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bam")
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sorted.bam")
+    shell:
+        """
+        ml GCC/7.3.0-2.30 SAMtools/1.9
+
+        samtools sort -o {output} {input}
+
+        module purge
+        """
+
+rule indexing:
+    input:
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bam")
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sorted.bam")
+    output:
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bam.bai")
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sorted.bam.bai")
+    shell:
+        """
+        ml GCC/7.3.0-2.30 SAMtools/1.9
+
+        samtools index -b {input}
+
+        module purge
+        """
+
+rule bigwig:
+    input:
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bam"),
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sorted.bam"),
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bam.bai")
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sorted.bam.bai")
+    output:
+        #os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bw")
+        os.path.join(WD, "1_mapping/unfiltered/{sample}.sorted.bw")
+    shell:
+        """
+        ml GCC/7.3.0-2.30  OpenMPI/3.1.1 deepTools/2.5.4-Python-3.6.6
+        bamCoverage --normalizeUsingRPKM -b {input[0]} -o {output}
+
+        module purge
+        """
+
+rule make_tag_directory:
+    input:
+        os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sam")
+    output:
+        os.path.join(WD, "2_tagdirs/{sample}_tagdir/tagInfo.txt")
+    params:
+        prefix = os.path.join(WD, "2_tagdirs/{sample}_tagdir")
+    shell:
+        """
+        ml GCC/7.3.0-2.30 homer/4.10
+
+        makeTagDirectory {params.prefix} {input}
+
+        module purge
+        """
+
+# Run Snakemake_peakcalling before running this rule
+rule L1HS_L1PA2_peaks_matrices_RNAseq_h3k4me3:
+    input:
+        rnaseq_forward = expand(os.path.join(RNA_DIR, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.out.forward.bw"), sample= RNA),
+        rnaseq_reverse = expand(os.path.join(RNA_DIR, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.out.reverse.bw"), sample= RNA),
+        bigwig = expand(os.path.join(WD, "1_mapping/filtered/{sample}.mapq10.sorted.bw"), sample = H3K4ME3_noIgG),
+        l1hs_positive = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1HS_positive_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1pa2_positive = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA2_positive_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1pa3_positive = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA3_positive_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1pa4_positive = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA4_positive_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1hs_negative = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1HS_negative_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1pa2_negative = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA2_negative_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1pa3_negative = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA3_negative_w_peaks.bed"), sample = H3K4ME3_noIgG),
+        l1pa4_negative = expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA4_negative_w_peaks.bed"), sample = H3K4ME3_noIgG)
+    output:
+        #common_positive_L1HS = os.path.join(WD, "deeptools/L1HS_common_peaks_positive.bed"), # No peaks over + L1HS. This file is empty
+        common_positive_L1PA2 = os.path.join(WD, "deeptools/L1PA2_common_peaks_positive.bed"),
+        common_positive_L1PA3 = os.path.join(WD, "deeptools/L1PA3_common_peaks_positive.bed"),
+        common_positive_L1PA4 = os.path.join(WD, "deeptools/L1PA4_common_peaks_positive.bed"),
+        common_negative_L1HS = os.path.join(WD, "deeptools/L1HS_common_peaks_negative.bed"),
+        common_negative_L1PA2 = os.path.join(WD, "deeptools/L1PA2_common_peaks_negative.bed"),
+        common_negative_L1PA3 = os.path.join(WD, "deeptools/L1PA3_common_peaks_negative.bed"),
+        common_negative_L1PA4 = os.path.join(WD, "deeptools/L1PA4_common_peaks_negative.bed"),
+        matrix_positive = os.path.join(WD, "deeptools/positive_L1HS_L1PA2_L1PA3_L1PA4_peaks_rnaseq.mtx"),
+        matrix_negative = os.path.join(WD, "deeptools/negative_L1HS_L1PA2_L1PA3_L1PA4_peaks_rnaseq.mtx")
+    shell:
+        """
+        ml GCC/7.3.0-2.30  OpenMPI/3.1.1 deepTools/2.5.4-Python-3.6.6
+        
+        cat {input.l1hs_negative} | sort -u -t"	" -k7,7 > {output.common_negative_L1HS}
+        cat {input.l1pa2_negative} | sort -u -t"	" -k7,7 > {output.common_negative_L1PA2}
+        cat {input.l1pa3_negative} | sort -u -t"	" -k7,7 > {output.common_negative_L1PA3}
+        cat {input.l1pa4_negative} | sort -u -t"	" -k7,7 > {output.common_negative_L1PA4}
+
+        cat {input.l1pa2_positive} | sort -u -t"	" -k7,7 > {output.common_positive_L1PA2}
+        cat {input.l1pa3_positive} | sort -u -t"	" -k7,7 > {output.common_positive_L1PA3}
+        cat {input.l1pa4_positive} | sort -u -t"	" -k7,7 > {output.common_positive_L1PA4}
+
+
+        computeMatrix scale-regions -R {output.common_positive_L1PA2} {output.common_positive_L1PA3} {output.common_positive_L1PA4} -S {input.bigwig} {input.rnaseq_forward} {input.rnaseq_reverse} --regionBodyLength 6000 -b 1000 -a 3000 -o {output.matrix_positive}
+         
+        computeMatrix scale-regions -R {output.common_negative_L1HS} {output.common_negative_L1PA2} {output.common_negative_L1PA3} {output.common_negative_L1PA4} -S {input.bigwig} {input.rnaseq_reverse} {input.rnaseq_forward} --regionBodyLength 6000 -b 1000 -a 3000 -o {output.matrix_negative}
+        """
+

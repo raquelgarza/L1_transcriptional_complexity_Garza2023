@@ -1,0 +1,80 @@
+# -*- coding: utf-8 -*-
+
+# lunarc configuration file
+# configuration file with sample list (yaml list)
+
+import os
+
+WD = "/projects/fs3/raquelgg/ASAP_pt_088/"
+configfile: os.path.join(WD, "src/config_files/config.yaml")
+
+SAMPLES = config["samples"]
+geneGTF = "/projects/fs3/raquelgg/annotations/hg38/gencode/v38/gencode.v38.annotation.gtf"
+starIndex = "/projects/fs5/jakobssonlab/GRCh38.p13_gencode.v38_STAR"
+teGTF = "/projects/fs3/raquelgg/annotations/hg38/repeatmasker/hg38_rmsk_TEtranscripts.gtf"
+
+# Run as:
+# snakemake -j 5 --cluster-config /path/to/server/config/file.json --cluster "sbatch -A {cluster.account} -p {cluster.partition} --tasks-per-node {cluster.tasks-per-node}  -t {cluster.time} -o {cluster.output} -e {cluster.error} -J {cluster.job-name} -N {cluster.nodes}" --latency-wait 60
+
+rule all:
+    input: 
+        expand(os.path.join(WD, "mapping/{sample}.filtered.sorted.bam.bai"), sample=SAMPLES)
+
+rule map:
+    input:
+        fq = "/projects/fs5/jakobssonlab/ASAP_pt_088/pt_088_copy/ccsreads/{sample}/{sample}.hifi_reads.fastq.gz",
+        index = "/projects/fs3/raquelgg/consensus_FL_L1HS_L1PA2_minimap2_index/human_L1_consensus_sequences_cons.mmi"
+    output:
+        os.path.join(WD, "mapping/{sample}.sam")
+    shell:
+        """
+        ml GCCcore/11.2.0 minimap2/2.24
+
+        minimap2 -k15 -w5 -uf -x splice -O6,24 -a {input.index} {input.fq} > {output}
+ 
+        module purge
+        """
+
+rule remove_antisense_reads:
+    input:
+        os.path.join(WD, "mapping/{sample}.sam")
+    output:
+        os.path.join(WD, "mapping/{sample}.filtered.bam")
+    shell:
+        """
+        ml GCC/10.2.0 SAMtools/1.12
+
+        samtools view -F16 {input} -b -o {output} 
+
+        module purge
+        """
+
+rule sort:
+    input:
+        os.path.join(WD, "mapping/{sample}.filtered.bam")
+    output:
+        os.path.join(WD, "mapping/{sample}.filtered.sorted.bam")
+    shell:
+        """
+        ml GCC/10.2.0 SAMtools/1.12
+
+        samtools sort -o {output} {input}
+
+        module purge
+        """
+
+rule index:
+    input:
+        os.path.join(WD, "mapping/{sample}.filtered.sorted.bam")
+    output:
+        os.path.join(WD, "mapping/{sample}.filtered.sorted.bam.bai")
+    shell:
+        """
+        ml GCC/10.2.0 SAMtools/1.12
+
+        samtools index {input}
+
+        module purge
+        """
+
+

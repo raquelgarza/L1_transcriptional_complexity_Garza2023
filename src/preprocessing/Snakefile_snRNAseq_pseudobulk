@@ -1,0 +1,140 @@
+# -*- coding: utf-8 -*-
+
+import os
+
+def rreplace(s, old, new, occurrence):
+    li = s.rsplit(old, occurrence)
+    return new.join(li)
+
+WD = "/projects/fs5/raquelgg/Control/Seq109/13.07.21/"
+configfile: os.path.join(WD, "src/config_files/config.yaml")
+
+CLUSTER = config["clusters"]
+cluster_sizes = {i : 1e+7/sum(1 for line in open("../3_mergeSamples/" + rreplace(i, "_", "_merged.clusters_", 1) + ".tsv")) for i in config["clusters"]}
+config.update(cluster_sizes)
+geneGTF = "/projects/fs3/raquelgg/annotations/hg38/gencode/v38/gencode.v38.annotation.gtf"
+exonGTF = "/projects/fs3/raquelgg/annotations/hg38/gencode/v38/gencode.v38.basic.annotation.gtf"
+starIndex = "/projects/fs5/jakobssonlab/GRCh38.p13_gencode.v38_STAR"
+teGTF = "/projects/fs3/raquelgg/annotations/hg38/repeatmasker/hg38_rmsk_TEtranscripts.gtf"
+
+# Run as:
+# snakemake -j 5 --cluster-config /path/to/server/config/file.json --cluster "sbatch -A {cluster.account} -p {cluster.partition} --tasks-per-node {cluster.tasks-per-node}  -t {cluster.time} -o {cluster.output} -e {cluster.error} -J {cluster.job-name} -N {cluster.nodes}" --latency-wait 60
+
+rule all:
+    input:
+        os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_positive_strand.mtx"),
+        os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_reverse_strand.mtx")
+
+rule indexing:
+    input:
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bam")
+    output:
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bam.bai")
+    shell:
+        """
+        ml GCC/10.2.0 SAMtools/1.12
+        samtools index -b {input}
+
+        module purge
+        """
+
+rule bigwig:
+    input:
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bam"),
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bam.bai")
+    output:
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bw")
+    params:
+        cluster_size = lambda wildcards: config[wildcards.cluster]
+    shell:
+        """
+        module purge
+        ml GCC/5.4.0-2.26  OpenMPI/1.10.3
+        ml Python/3.5.2
+            
+        bamCoverage --scaleFactor {params.cluster_size} -b {input[0]} -o {output}
+
+        module purge
+        """
+
+rule filterStrand:
+    input:
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bam"),
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.bam.bai")
+    output:
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.forward.bw"),
+        os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.reverse.bw")
+    params:
+        cluster_size = lambda wildcards: config[wildcards.cluster]
+    shell:
+        """
+        ml GCC/5.4.0-2.26  OpenMPI/1.10.3 Python/3.5.2
+        
+	    # bamCoverage filterRNAstrand assumes a standard dUTP-based library preparation (that is, –filterRNAstrand=forward keeps minus-strand reads, which originally came from genes on the forward strand using a dUTP-based method). Since 10x libraries are not dUTP (-s 2) but forwardly sequence (-s 1), I've assigned what comes out here as "forward" to the reverse transcription file and viceversa.
+        
+        bamCoverage --scaleFactor {params.cluster_size} --filterRNAstrand forward -b {input[0]} -o {output[1]} # Reverse transcription
+        bamCoverage --scaleFactor {params.cluster_size} --filterRNAstrand reverse -b {input[0]} -o {output[0]} # Forward transcription
+
+        module purge
+        """
+
+rule matrix_FL_L1PAs:
+    input:
+        forward_strand = expand(os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.forward.bw"), cluster=CLUSTER),
+        reverse_strand = expand(os.path.join(WD, "3_mergeSamples/clusterPipeline_grouped/map_cluster/unique/{cluster}_Aligned.sortedByCoord.out.reverse.bw"), cluster=CLUSTER),
+        regions="/projects/fs3/raquelgg/annotations/hg38/repeatmasker/hg38.fa.fulllength.L1HS_L1PA.bed"
+    output:
+        positive = os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_positive_strand.mtx"),
+        reverse = os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_reverse_strand.mtx")
+    shell:
+        """
+        grep L1HS {input.regions}  > L1HS_FL.bed
+        grep L1PA2 {input.regions}  > L1PA2_FL.bed
+        grep L1PA3 {input.regions}  > L1PA3_FL.bed
+        grep L1PA4 {input.regions}  > L1PA4_FL.bed
+        grep L1PA10 {input.regions}  > L1PA10_FL.bed
+        grep L1PA11 {input.regions}  > L1PA11_FL.bed
+
+        negative_l1hs=regions_negative_l1hs.bed
+        positive_l1hs=regions_positive_l1hs.bed
+
+        awk '(NR>1)' L1HS_FL.bed | awk '{{if($6 == "-"){{print $0}}}}' > $negative_l1hs
+        awk '(NR>1)' L1HS_FL.bed | awk '{{if($6 == "+"){{print $0}}}}' > $positive_l1hs
+
+        negative_l1pa2=regions_negative_l1pa2.bed
+        positive_l1pa2=regions_positive_l1pa2.bed
+
+        awk '(NR>1)' L1PA2_FL.bed | awk '{{if($6 == "-"){{print $0}}}}' > $negative_l1pa2
+        awk '(NR>1)' L1PA2_FL.bed | awk '{{if($6 == "+"){{print $0}}}}' > $positive_l1pa2
+
+        negative_l1pa3=regions_negative_l1pa3.bed
+        positive_l1pa3=regions_positive_l1pa3.bed
+
+        awk '(NR>1)' L1PA3_FL.bed | awk '{{if($6 == "-"){{print $0}}}}' > $negative_l1pa3
+        awk '(NR>1)' L1PA3_FL.bed | awk '{{if($6 == "+"){{print $0}}}}' > $positive_l1pa3
+
+        negative_l1pa4=regions_negative_l1pa4.bed
+        positive_l1pa4=regions_positive_l1pa4.bed
+
+        awk '(NR>1)' L1PA4_FL.bed | awk '{{if($6 == "-"){{print $0}}}}' > $negative_l1pa4
+        awk '(NR>1)' L1PA4_FL.bed | awk '{{if($6 == "+"){{print $0}}}}' > $positive_l1pa4
+
+        negative_l1pa10=regions_negative_l1pa10.bed
+        positive_l1pa10=regions_positive_l1pa10.bed
+
+        awk '(NR>1)' L1PA10_FL.bed | awk '{{if($6 == "-"){{print $0}}}}' > $negative_l1pa10
+        awk '(NR>1)' L1PA10_FL.bed | awk '{{if($6 == "+"){{print $0}}}}' > $positive_l1pa10
+
+        negative_l1pa11=regions_negative_l1pa11.bed
+        positive_l1pa11=regions_positive_l1pa11.bed
+
+        awk '(NR>1)' L1PA11_FL.bed | awk '{{if($6 == "-"){{print $0}}}}' > $negative_l1pa11
+        awk '(NR>1)' L1PA11_FL.bed | awk '{{if($6 == "+"){{print $0}}}}' > $positive_l1pa11
+        ml GCC/7.3.0-2.30  OpenMPI/3.1.1 deepTools/2.5.4-Python-3.6.6        
+        
+        computeMatrix scale-regions -R $positive_l1hs $positive_l1pa2 $positive_l1pa3 $positive_l1pa4 $positive_l1pa10 $positive_l1pa11 -S {input.forward_strand} {input.reverse_strand} --regionBodyLength 6000 -b 6000 -a 6000 -o {output.positive} 
+        computeMatrix scale-regions -R $negative_l1hs $negative_l1pa2 $negative_l1pa3 $negative_l1pa4 $negative_l1pa10 $negative_l1pa11 -S {input.reverse_strand} {input.forward_strand} --regionBodyLength 6000 -b 6000 -a 6000 -o {output.reverse}
+
+        """
+
+

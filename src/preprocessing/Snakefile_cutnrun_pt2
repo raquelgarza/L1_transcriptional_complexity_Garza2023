@@ -1,0 +1,104 @@
+# -*- coding: utf-8 -*-
+
+import os
+
+WD = "/projects/fs3/raquelgg/JGJSeq169_145cutorun/"
+RD = "/projects/fs5/jakobssonlab/JGJSeq169_145cutorun/fastq_files/"
+configfile: os.path.join(WD, "src/config_files/config_cutnrun_pt2.json") # I've included a sample config file. Same pipeline was used for the adult dataset.
+
+CUTNRUN = config["cutnrun"]
+H3K4_PAIRED = config["h3k4_paired"]
+
+geneGTF = "/projects/fs3/raquelgg/annotations/hg38/gencode/v38/gencode.v38.annotation.gtf"
+teGTF = "/projects/fs3/raquelgg/annotations/hg38/repeatmasker/hg38_rmsk_TEtranscripts.gtf"
+bowtie2Index = "/projects/fs1/common/genome/lunarc/indicies/bowtie2/human/hg38/hg38"
+
+# Run as:
+# snakemake -j 5 --cluster-config /path/to/server/config/file.json --cluster "sbatch -A {cluster.account} -p {cluster.partition} --tasks-per-node {cluster.tasks-per-node}  -t {cluster.time} -o {cluster.o} -e {cluster.e} -J {cluster.J} -N {cluster.N}" --latency-wait 60
+
+rule all:
+    input:
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1HS_positive_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA2_positive_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA3_positive_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA4_positive_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1HS_negative_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA2_negative_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA3_negative_w_peaks.bed"), sample=H3K4_PAIRED),
+        expand(os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA4_negative_w_peaks.bed"), sample=H3K4_PAIRED)
+
+def get_igg_tag(wildcards):
+    return os.path.join(WD, ("2_tagdirs/" + CUTNRUN[wildcards.sample] + "_tagdir"))
+
+rule peak_calling:
+    input:
+        os.path.join(WD, "2_tagdirs/{sample}_tagdir/tagInfo.txt"),
+    output:
+        os.path.join(WD, "2_tagdirs/{sample}_tagdir/regions.txt")
+    params:
+        prefix = os.path.join(WD, "3_peak_calling/{sample}/"),
+        tag_dirs = os.path.join(WD, "2_tagdirs/{sample}_tagdir"),
+        tag_dirs_igg = get_igg_tag 
+    shell:
+        """
+        ml GCC/7.3.0-2.30 homer/4.10
+
+        mkdir -p {params.prefix}
+
+        findPeaks {params.tag_dirs} -style histone -o auto -i {params.tag_dirs_igg}
+
+        module purge
+        """
+
+rule annotate_peaks:
+    input:
+        os.path.join(WD, "2_tagdirs/{sample}_tagdir/regions.txt")
+    output:
+        os.path.join(WD, "2_tagdirs/{sample}_tagdir/peaks_annotated.txt")
+    shell:
+        """
+        ml GCC/7.3.0-2.30 homer/4.10
+
+        annotatePeaks.pl {input} hg38 > {output}
+
+        module purge
+        """
+
+rule L1HS_L1PA4_peaks_matrices:
+    input:
+        os.path.join(WD, "2_tagdirs/{sample}_tagdir/peaks_annotated.txt"),
+        l1hs = "L1HS_FL.bed",
+        l1pa2 = "L1PA2_FL.bed",
+        l1pa3 = "L1PA3_FL.bed",
+        l1pa4 = "L1PA4_FL.bed"
+    output:
+        l1hs_positive = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1HS_positive_w_peaks.bed"),
+        l1pa2_positive = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA2_positive_w_peaks.bed"),
+        l1pa3_positive = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA3_positive_w_peaks.bed"),
+        l1pa4_positive = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA4_positive_w_peaks.bed"),
+        l1hs_negative = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1HS_negative_w_peaks.bed"),
+        l1pa2_negative = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA2_negative_w_peaks.bed"),
+        l1pa3_negative = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA3_negative_w_peaks.bed"),
+        l1pa4_negative = os.path.join(WD, "deeptools/{sample}_L1HS_L1PA2_L1PA3_L1PA4_peaks/L1PA4_negative_w_peaks.bed")
+    shell:
+        """
+
+        ml GCC/10.2.0 BEDTools/2.30.0
+
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1hs} -wo | awk '{{if($12 == "-"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1hs_negative}
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1hs} -wo | awk '{{if($12 == "+"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1hs_positive} # This is empty, so we wont create a matrix from it
+
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1pa2} -wo | awk '{{if($12 == "-"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1pa2_negative}
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1pa2} -wo | awk '{{if($12 == "+"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1pa2_positive}
+
+
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1pa3} -wo | awk '{{if($12 == "-"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1pa3_negative}
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1pa3} -wo | awk '{{if($12 == "+"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1pa3_positive}
+
+
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1pa4} -wo | awk '{{if($12 == "-"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1pa4_negative}
+        awk '{{print $2,$3,$4,".",".",$1}}' OFS="\t" {input[0]} | tail -n +2 | bedtools intersect -a stdin -b {input.l1pa4} -wo | awk '{{if($12 == "+"){{print $7,$8,$9,$10,$11,$12,$13,$14,$1,$2,$3,$4,$5,$6,$15}}}}' OFS="\t" > {output.l1pa4_positive}
+
+        """
+
+
