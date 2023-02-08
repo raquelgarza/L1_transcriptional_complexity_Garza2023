@@ -1,0 +1,515 @@
+---
+title: "LINC01876 CRISPRi"
+output: html_notebook
+---
+
+Some functions 
+```{r class.source = 'fold-hide'}
+## getSignName ##
+# Get significantly different gene names. 
+# Taken from source code of the package deseqAbstraction which is no longer available on github.
+# Credits to Per L. Brattås
+# Parameters:
+# x = results object from deseq
+# p = padj threshold for significance
+# l = log2FC threshold for significance
+getSignName <- function(x,p,l=0) {
+  up <- x[!is.na(x$padj) & x$padj < p & x$log2FoldChange > l,]
+  down <- x[!is.na(x$padj) & x$padj < p & x$log2FoldChange < -l,]
+  return(list(up=rownames(up),down=rownames(down)))
+}
+## getAverage ##
+# Get average expression (normalized by median of ratios) of each of the conditions in a deseq object.
+# Taken from source code of the package deseqAbstraction which is no longer available on github.
+# Credits to Per L. Brattås
+# Parameters:
+# dds = deseq object
+getAverage <- function(dds) {
+  baseMeanPerLvl <- sapply( levels(dds$condition), function(lvl) rowMeans( counts(dds,normalized=TRUE)[,dds$condition == lvl] ) )
+  baseSDPerLvl <- sapply( levels(dds$condition), function(lvl) apply( counts(dds,normalized=TRUE)[,dds$condition == lvl],1,sd ) )
+  colnames(baseSDPerLvl) <- paste("st.dev:",colnames(baseSDPerLvl),sep="")
+  return(list(Mean=baseMeanPerLvl,SD=baseSDPerLvl))
+}
+
+meanPlot_cus <- function(exp,test,c1 = "condition 1",c2 = "condition 2",p=.05,l=0,id=F, ttl="", 
+                         repel=TRUE, col1="firebrick3", col2="steelblue4", col3="black", highlights=NA){
+  sign <- getSignName(x = test,p = p,l = l)
+  u <- sign$up
+  d <- sign$down
+  
+  #color up and down sign..
+  colVec <- ifelse(test = (rownames(exp) %in% u),
+                   yes = col1,
+                   no = ifelse(test = (rownames(exp) %in% d),
+                               yes = col2, no =col3))
+  colVec[is.na(colVec)] <- "steelblue" ## if NA make sure it's not counted as <p
+  #size of points
+  cexVec <- ifelse(test = (rownames(exp) %in% u),
+                   yes = 0.35,
+                   no = ifelse(test = (rownames(exp) %in% d),
+                               yes = 0.35, no = 0.3))
+  
+  exp_log <- as.data.frame(log2(exp[,c(c1, c2)]))
+  exp_log$Name <- rownames(exp_log)
+  
+  exp_log$reg <- factor(ifelse(exp_log$Name %in% u, paste('upregulated in ', c1, ' (', length(u), ')', sep =''),
+                               ifelse(exp_log$Name %in% d, paste('downregulated in ', c1,' (', length(d), ')', sep =''), paste('not significant', ' (', (nrow(test) - length(u) - length(d)), ')', sep=''))))
+  
+  library(ggrepel)
+  if(repel == TRUE){
+    plt <- ggplot(exp_log, aes(x=get(c2), y=get(c1), label=Name, color=reg)) + geom_point(aes(size=cexVec))+ scale_color_manual(values=c(col2, col3, col1))+ scale_size_continuous(range=c(1,2), guide="none")+ geom_text_repel(data = subset(exp_log, Name %in% u | Name %in% d),direction    = "y", nudge_y = 0.4, nudge_x = -0.5)
+  }
+  else{
+    plt <- ggplot(exp_log, aes(x=get(c2), y=get(c1), color=reg)) + geom_point(aes(size=cexVec))+ scale_color_manual(values=c(col2, col3, col1))+ scale_size_continuous(range=c(1,2), guide="none")
+  }
+  plt <- plt + labs(x=paste("log2(mean ",c2,")",sep=""), 
+                    y=paste("log2(mean ",c1,")",sep=""),
+                    title=paste(ttl, paste(c1," vs. ",c2,sep=""), sep = ': '),
+                    subtitle=paste("p-adj < ",p,", log2(fc) > ",l,sep=""))+theme(
+                      plot.title = element_text( size=14, face="bold"),  panel.grid.major = element_line(colour="white"),
+                      panel.grid.minor = element_line(colour="white"), panel.background = element_rect(fill = "white",
+                                                                                                       colour = "white",
+                                                                                                       size = 0.5, linetype = "solid"),
+                      axis.line = element_line(size = 0.5, linetype = "solid",
+                                               colour = "black"), 
+                      legend.title=element_blank()) 
+  
+  
+  if(id==T) {
+    
+    identify(log2(exp[,1]),log2(exp[,2]),labels = rownames(exp))
+    
+  }
+  
+  if(!is.na(highlights)){
+    plt <- plt + geom_point(data=exp_log[highlights,], aes(x=get(c2), y=get(c1)), colour="springgreen3", size=5, shape=1, stroke=2)
+  }
+  return(plt)
+  
+}
+```
+
+```{r}
+library(stringr)
+library(data.table)
+library(RColorBrewer)
+library(ggplot2)
+library(DESeq2)
+library(pheatmap)
+
+path <- "/Volumes/MyPassport/l1_manuscript/gene_counts/default/"
+files <- list.files(path, pattern = "csv")
+files <- files[which(!grepl("summary", files))]
+files <- files[which(grepl("LV", files))]
+samples <- unique(sapply(str_split(files, ".gene_count_matrix_2.csv"), `[[`, 1))
+
+for(i in 1:length(samples)){
+  file <- paste(path, files[i], sep="")
+  sample <- samples[i]
+  
+  tmp <- fread(file, data.table=F)
+  tmp <- tmp[,c("Geneid", "Strand", "Length", colnames(tmp)[ncol(tmp)])]
+  colnames(tmp)[ncol(tmp)] <- sample
+  
+  if(i == 1){
+    crispri_gene_count <- tmp
+  }else{
+    crispri_gene_count <- merge(crispri_gene_count, tmp, by=c("Geneid", "Strand", "Length"), all=T)
+  }
+}
+# crispri_gene_count <- fread("/Volumes/MyPassport/linc01876/crispri_Diahann_analysis/LINC01876_CRISPRi.csv", data.table = F)
+# colnames(crispri_gene_count)[7:ncol(crispri_gene_count)] <- sapply(str_split(sapply(str_split(colnames(crispri_gene_count)[7:ncol(crispri_gene_count)], "/"), `[[`, 7), "_Aligned.sortedByCoord.out.bam"), `[[`, 1)
+
+coldata <- data.frame(samples = colnames(crispri_gene_count)[7:ncol(crispri_gene_count)],
+                      LV = sapply(str_split(colnames(crispri_gene_count)[7:ncol(crispri_gene_count)], "_"), `[[`, 1))
+coldata$condition <- ifelse(coldata$LV == "LV3599", "LacZ", "KD")
+
+rownames(crispri_gene_count) <- crispri_gene_count$Geneid
+crispri_gene_count <- crispri_gene_count[,coldata$samples]
+
+outliers <- colnames(crispri_gene_count)[which(grepl("LV3627", colnames(crispri_gene_count)))] #  | colnames(crispri_gene_count) == "LV3599_1_h6_NPCday14_S9_LINC01876_CRISPRi"
+good_samples <- colnames(crispri_gene_count)[which(!colnames(crispri_gene_count) %in% outliers)]
+crispri_gene_count <- crispri_gene_count[,good_samples]
+rownames(coldata) <- coldata$samples
+coldata <- coldata[good_samples,]
+
+crispri_dds <- DESeqDataSetFromMatrix(crispri_gene_count, coldata, design = ~ condition)
+crispri_dds$condition <- relevel(crispri_dds$condition, "LacZ")
+crispri_dds <- DESeq(crispri_dds)
+crispri_res <- lfcShrink(crispri_dds, "condition_KD_vs_LacZ")
+crispri_vst <- varianceStabilizingTransformation(crispri_dds)
+plotPCA(crispri_vst, intgroup="LV")
+crispri_gene_count_norm <- as.data.frame(counts(crispri_dds, normalized=T))
+
+annotation <- fread("/Volumes/MyPassport/annotations/human/gencode/v36/gencode.v36.annotation.ids.name.type.tab", skip=1, header = F)
+colnames(annotation) <- c("gene_id", "gene_name", "gene_type") 
+
+markers <- c("NANOG", "POU5F1", "KLF4", "MYC", "LIN28A", "FOXG1", "OTX2", "PAX6", "EMX2", "NKX2-1", "DLX2", "OTX1", "EN1", "LMX1A", "CORIN", "FOXA2", "PAX8", "HOXA2", "SOX2", "TUBB", "DCX", "TBR1", "EOMES", "CUX2", "OLIG2", "GFAP", "EMX1")
+gene_vst_df <- merge(assay(crispri_vst), unique(annotation[,c("gene_id", "gene_name")]), by.x="row.names", by.y="gene_id")
+biomarkers_count_norm <- gene_vst_df[which(gene_vst_df$gene_name %in% markers), c("gene_name", coldata$sample)]
+rownames(biomarkers_count_norm) <- biomarkers_count_norm$gene_name
+biomarkers_count_norm <- biomarkers_count_norm[,-1]
+
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/forebrain_heatmap.pdf")
+pheatmap(biomarkers_count_norm[markers, rownames(coldata)],  cluster_rows = F, cluster_cols = F, annotation_col = coldata[,c("condition"), drop=F], border_color = NA)
+dev.off()
+
+```
+
+## DEA
+```{r}
+crispri_res_df <- as.data.frame(crispri_res)
+table(crispri_res$padj < 0.05 & crispri_res$log2FoldChange > 0.5)
+table(crispri_res$padj < 0.05 & crispri_res$log2FoldChange < -0.5)
+# plotMA(crispri_dds)
+
+crispri_res_df$type <- ifelse(crispri_res_df$log2FoldChange > 0.5 & crispri_res_df$padj < 0.05, "Upregulated", 
+                              ifelse(crispri_res_df$log2FoldChange < -0.5 & crispri_res_df$padj < 0.05, "Downregulated", "Not significant"))
+crispri_res_df[which(is.na(crispri_res_df$type)), "type"] <- "Not significant"
+crispri_res_df$type <- ifelse(crispri_res_df$type == "Upregulated", paste("Upregulated (", table(crispri_res_df$type)["Upregulated"], ")", sep=""),
+                              ifelse(crispri_res_df$type == "Downregulated", paste("Downregulated (", table(crispri_res_df$type)["Downregulated"], ")", sep=""),
+                                     paste("Not significant (", table(crispri_res_df$type)["Not significant"], ")", sep="")))
+
+library(EnhancedVolcano)
+p <- EnhancedVolcano(crispri_res,
+  lab = NA, 
+  x = 'log2FoldChange', 
+  y = 'padj', pCutoff = 0.05, FCcutoff = 0.5, pointSize = 1, ylim = c(0,8), xlim = c(-2.5,3), shape = 16)
+
+p$data$Sig <- as.character(p$data$Sig)
+p$data$Sig <- ifelse(p$data$Sig == "FC_P" & p$data$log2FoldChange < 0, "FC_P_down", p$data$Sig)
+p$data$Sig <- ifelse(!p$data$Sig %in% c("FC_P", "FC_P_down"), "NS", p$data$Sig)
+p$data$Sig <- paste(p$data$Sig, "(", table(p$data$Sig)[p$data$Sig], ")")
+table(p$data$Sig)
+
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/linc01876_crispri_volcano.pdf", width = 4.5, height = 3.5)
+ggplot(p$data, aes(x=log2FoldChange, y=-log10(padj), colour=Sig)) + geom_point(alpha=0.5) + theme_classic() + 
+  geom_hline(yintercept = -log10(0.05), linetype="dashed") + geom_vline(xintercept = 0.5, linetype="dashed") +
+  geom_vline(xintercept = -0.5, linetype="dashed") + lims(y = c(0,12), x = c(-2.5,2.5)) + 
+  scale_colour_manual(values = c("NS ( 60609 )" = "gray23", "FC_P ( 41 )" = "firebrick", "FC_P_down ( 10 )" = "steelblue"))
+dev.off()
+
+table(crispri_res_df$type)
+```
+
+```{r}
+bed_gene <- fread("/Volumes/MyPassport/annotations/human/gencode/v36/gencode.v36.annotation.gene.bed", data.table = F)
+colnames(bed_gene) <- c("chr", "start", "end", "gene_id", "dot", "strand")
+rownames(bed_gene) <- bed_gene$gene_id
+crispri_res_df <- merge(crispri_res_df, bed_gene, by="row.names")
+crispri_res_df <- crispri_res_df[,c("chr", "start", "end", "gene_id", "strand", "baseMean", "log2FoldChange", "lfcSE", "pvalue", "padj", "type")]
+crispri_res_df_chr2 <- crispri_res_df[which(crispri_res_df$chr == "chr2"),]
+crispri_res_df_chr2$distance_linc01876 <- crispri_res_df_chr2$start - 156011530
+crispri_res_df_chr2 <- merge(crispri_res_df_chr2, annotation, by="gene_id")
+crispri_res_df_chr2$type <- ifelse(crispri_res_df_chr2$log2FoldChange > 0.5 & crispri_res_df_chr2$padj < 0.05, "Upregulated", 
+                              ifelse(crispri_res_df_chr2$log2FoldChange < -0.5 & crispri_res_df_chr2$padj < 0.05, "Downregulated", "Not significant"))
+crispri_res_df_chr2[which(is.na(crispri_res_df_chr2$type)), "type"] <- "Not significant"
+crispri_res_df_chr2$type <- ifelse(crispri_res_df_chr2$type == "Upregulated", paste("Upregulated (", table(crispri_res_df_chr2$type)["Upregulated"], ")", sep=""),
+                              ifelse(crispri_res_df_chr2$type == "Downregulated", paste("Downregulated (", table(crispri_res_df_chr2$type)["Downregulated"], ")", sep=""),
+                                     paste("Not significant (", table(crispri_res_df_chr2$type)["Not significant"], ")", sep="")))
+
+crispri_res_df_chr2$label <- ifelse(crispri_res_df_chr2$type != "Not significant (4192)", crispri_res_df_chr2$gene_name, NA)
+library(ggrepel)
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/manhattan_plot_linc01876_CRISPRi.pdf", width = 6, height = 4)
+ggplot(crispri_res_df_chr2[which(crispri_res_df_chr2$gene_name != "LINC01876"),], aes(x=distance_linc01876, y=log2FoldChange, colour = type, label=label)) + geom_point(size=0.5) + geom_hline(yintercept = 0, linetype="dashed", colour="red", size = 0.7, alpha = 0.5) + geom_vline(xintercept = 0, linetype="dashed", colour="red", size = 0.7, alpha = 0.5) + theme_classic() + scale_colour_manual(values = c("Upregulated (4)" = "firebrick", "Downregulated (1)" = "steelblue", "Not signficant (4192)" = "darkgrey")) + labs(x="Distance to TSS of LINC01876", colour="") + geom_label_repel(box.padding = 0.5)
+dev.off()
+```
+
+
+
+```{r}
+path <- "/Volumes/MyPassport/l1_manuscript/gene_counts/default/"
+files <- list.files(path, pattern = "csv")
+files <- files[which(!grepl("summary", files))]
+files <- files[which(!startsWith(files, "LV") & !startsWith(files, "HuEm") & !startsWith(files, "TBI"))]
+samples <- unique(sapply(str_split(files, ".gene_count_matrix_2.csv"), `[[`, 1))
+
+for(i in 1:length(samples)){
+  file <- paste(path, files[i], sep="")
+  sample <- samples[i]
+  
+  tmp <- fread(file, data.table=F)
+  tmp <- tmp[,c("Geneid", "Strand", "Length", colnames(tmp)[ncol(tmp)])]
+  colnames(tmp)[ncol(tmp)] <- sample
+  
+  if(i == 1){
+    chimp_human_gene_count <- tmp
+  }else{
+    chimp_human_gene_count <- merge(chimp_human_gene_count, tmp, by=c("Geneid", "Strand", "Length"), all=T)
+  }
+}
+
+coldata_chimp <- fread("/Volumes/MyPassport/linc01876/data/chimp_human_metadata.tab", data.table = F)
+rownames(coldata_chimp) <- coldata_chimp$sample
+
+rownames(chimp_human_gene_count) <- chimp_human_gene_count$Geneid
+coldata_chimp <- coldata_chimp[which(coldata_chimp$sample %in% colnames(chimp_human_gene_count)), ]
+chimp_human_gene_count <- chimp_human_gene_count[,which(colnames(chimp_human_gene_count) %in% coldata_chimp$sample)]
+# chimp_human_gene_count <- chimp_human_gene_count[which(apply(chimp_human_gene_count, 1, more_10) > 3),]
+
+chimp_human_dds <- DESeqDataSetFromMatrix(chimp_human_gene_count, coldata_chimp[colnames(chimp_human_gene_count),], design = ~ species)
+chimp_human_dds$species <- relevel(chimp_human_dds$species, "chimp")
+chimp_human_dds <- DESeq(chimp_human_dds)
+chimp_human_gene_count_norm <- as.data.frame(counts(chimp_human_dds, normalized=T))
+
+chimp_human_res <- lfcShrink(chimp_human_dds, "species_human_vs_chimp")
+chimp_human_res_df <- as.data.frame(chimp_human_res)
+
+chimp_human_res_df$type <- ifelse(chimp_human_res_df$log2FoldChange > 0.5 & chimp_human_res_df$padj < 0.05, "Upregulated", 
+                              ifelse(chimp_human_res_df$log2FoldChange < -0.5 & chimp_human_res_df$padj < 0.05, "Downregulated", "Not significant"))
+chimp_human_res_df[which(is.na(chimp_human_res_df$type)), "type"] <- "Not significant"
+chimp_human_res_df$type <- ifelse(chimp_human_res_df$type == "Upregulated", paste("Upregulated (", table(chimp_human_res_df$type)["Upregulated"], ")", sep=""),
+                              ifelse(chimp_human_res_df$type == "Downregulated", paste("Downregulated (", table(chimp_human_res_df$type)["Downregulated"], ")", sep=""),
+                                     paste("Not significant (", table(chimp_human_res_df$type)["Not significant"], ")", sep="")))
+table(chimp_human_res_df$type)
+table(crispri_res_df$type)
+
+# rownames(crispri_res_df) <- crispri_res_df$gene_id
+crispri_res_upreg <- crispri_res_df[which(crispri_res_df$type == "Upregulated (41)"),]
+crispri_res_downreg <- crispri_res_df[which(crispri_res_df$type == "Downregulated (10)"),]
+
+chimp_human_res_downreg <- chimp_human_res_df[which(chimp_human_res_df$type == "Downregulated (2289)"),]
+chimp_human_res_upreg <- chimp_human_res_df[which(chimp_human_res_df$type == "Upregulated (1709)"),]
+```
+
+```{r}
+gene_count_crispri_chimp_human <- merge(crispri_gene_count, chimp_human_gene_count, by="row.names", all.x = T)
+rownames(gene_count_crispri_chimp_human) <- gene_count_crispri_chimp_human$Row.names
+gene_count_crispri_chimp_human <- gene_count_crispri_chimp_human[,-1]
+
+coldata <- data.frame(sample = colnames(gene_count_crispri_chimp_human),
+                      dataset = ifelse(startsWith(colnames(gene_count_crispri_chimp_human), "LV"), "crispri", "chimp_human"))
+coldata <- merge(coldata, coldata_chimp, by="sample", all.x=T)
+coldata$species <- ifelse(startsWith(coldata$sample, "LV"), "human", coldata$species)
+coldata$condition <- ifelse(startsWith(coldata$sample, "LV"), 
+                            sapply(str_split(coldata$sample, "_"), `[[`, 1), coldata$species)
+coldata$condition <- ifelse(coldata$condition == "LV3599", "LacZ", 
+                            ifelse(coldata$condition %in% c("LV3628", "LV3629"), "KD", coldata$condition))
+rownames(coldata) <- coldata$sample
+coldata <- coldata[order(coldata$condition),]
+gene_count_crispri_chimp_human
+```
+
+```{r}
+gene_dds <- DESeqDataSetFromMatrix(gene_count_crispri_chimp_human[,coldata$sample], coldata, design = ~ condition)
+gene_dds$condition <- relevel(gene_dds$condition, "LacZ")
+gene_dds <- DESeq(gene_dds)
+gene_count_norm <- as.data.frame(counts(gene_dds, normalized=T))
+gene_vst <- varianceStabilizingTransformation(gene_dds)
+
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/September2022/plots/downreg_KD_chimphuman_heatmap.pdf")
+pheatmap(log2(assay(gene_vst[crispri_res_downreg$gene_id, rownames(coldata)])+1), show_rownames = F, cluster_rows = T, cluster_cols = F, scale = "row", annotation_col = coldata[,c("condition"), drop=F], gaps_col = c(4,8,13), border_color = NA, show_colnames = F)
+# dev.off()
+
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/September2022/plots/upreg_KD_chimphuman_heatmap.pdf")
+pheatmap(log2(assay(gene_vst[crispri_res_upreg$gene_id, rownames(coldata)])+1), show_rownames = F, cluster_rows = T, cluster_cols = F, scale = "row", annotation_col = coldata[,c("condition"), drop=F], gaps_col = c(4,8,13), border_color = NA, show_colnames = F)
+# dev.off()
+
+baseMeanPerLvl <- sapply( levels(gene_dds$condition), function(lvl) rowMeans( counts(gene_dds,normalized=TRUE)[, gene_dds$condition == lvl] ) )
+baseSdPerLvl <- sapply( levels(gene_dds$condition), function(lvl) rowSds(counts(gene_dds,normalized=TRUE)[, gene_dds$condition == lvl], useNames=T))
+baseMeanPerLvl_upreg <- baseMeanPerLvl[c(crispri_res_upreg$gene_id),]
+baseMeanPerLvl_downreg <- baseMeanPerLvl[c(crispri_res_downreg$gene_id),]
+row_annotation <- data.frame(gene_id = c(crispri_res_downreg$gene_id, crispri_res_upreg$gene_id))
+row_annotation$type <- ifelse(row_annotation$gene_id %in% crispri_res_downreg$gene_id, "Downregulated", 
+                              ifelse(row_annotation$gene_id %in% rownames(crispri_res_upreg), "Upregulated", NA))
+rownames(row_annotation) <- row_annotation$gene_id
+row_annotation <- row_annotation[,-1, drop=F]
+
+baseMeanPerLvl_upreg <- as.data.frame(baseMeanPerLvl_upreg)
+baseMeanPerLvl_downreg <- as.data.frame(baseMeanPerLvl_downreg)
+
+baseMeanPerLvl_downreg$chimp_human <- log2(baseMeanPerLvl_downreg$chimp /baseMeanPerLvl_downreg$human)
+baseMeanPerLvl_downreg$KD_lacz <- log2(baseMeanPerLvl_downreg$KD / baseMeanPerLvl_downreg$LacZ)
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/heatmap_downreg_crispri_chimp_human.pdf", width = 4)
+pheatmap(baseMeanPerLvl_downreg[,c("KD_lacz", "chimp_human")], cluster_cols = F, show_rownames = F, breaks = seq(-5, 5, by = 0.01), color = colorRampPalette(c("blue","white", "red"))(length(seq(-5, 5, by = 0.01))), border_color = NA)
+# dev.off()
+
+baseMeanPerLvl_upreg$chimp_human <- log2(baseMeanPerLvl_upreg$chimp / baseMeanPerLvl_upreg$human)
+baseMeanPerLvl_upreg$KD_lacz <- log2(baseMeanPerLvl_upreg$KD / baseMeanPerLvl_upreg$LacZ)
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/heatmap_upreg_crispri_human_chimp.pdf", width = 4)
+pheatmap(baseMeanPerLvl_upreg[,c("KD_lacz", "chimp_human")], cluster_cols = F, show_rownames = F, breaks = seq(-5, 5, by = 0.01), color = colorRampPalette(c("blue3","white", "red"))(length(seq(-5, 5, by = 0.01))), border_color = NA)
+# dev.off()
+
+baseMeanPerLvl_DE <- as.data.frame(baseMeanPerLvl[c(rownames(baseMeanPerLvl_upreg), rownames(baseMeanPerLvl_downreg)),])
+baseMeanPerLvl_DE$gene_id <- rownames(baseMeanPerLvl_DE)
+baseMeanPerLvl_DE$chimp_human <- log2((baseMeanPerLvl_DE$chimp) / (baseMeanPerLvl_DE$human))
+baseMeanPerLvl_DE$KD_lacz <- log2((baseMeanPerLvl_DE$KD) / (baseMeanPerLvl_DE$LacZ))
+
+baseMeanPerLvl_DE$direction <- ifelse((baseMeanPerLvl_DE$chimp_human > 0 & baseMeanPerLvl_DE$KD_lacz > 0) | baseMeanPerLvl_DE$chimp_human < 0 & baseMeanPerLvl_DE$KD_lacz < 0, 
+                                       ifelse(baseMeanPerLvl_DE$chimp_human > 0, "Positive congruent", "Negative congruent"), 
+                                       ifelse(baseMeanPerLvl_DE$chimp_human > 0, "Positive opposite", "Negative opposite"))
+baseMeanPerLvl_DE$direction <- ifelse(baseMeanPerLvl_DE$direction == "Positive congruent", paste("Positive congruent (", table(baseMeanPerLvl_DE$direction)["Positive congruent"], ")", sep=""),
+                              ifelse(baseMeanPerLvl_DE$direction == "Negative congruent", paste("Negative congruent (", table(baseMeanPerLvl_DE$direction)["Negative congruent"], ")", sep=""),
+                              ifelse(baseMeanPerLvl_DE$direction == "Positive opposite", paste("Positive opposite (", table(baseMeanPerLvl_DE$direction)["Positive opposite"], ")", sep=""),
+                              ifelse(baseMeanPerLvl_DE$direction == "Negative opposite", paste("Negative opposite (", table(baseMeanPerLvl_DE$direction)["Negative opposite"], ")", sep=""), NA))))
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/scatterplot_chimp_human_KD_lacz.pdf", width = 5, height = 3)
+ggplot(baseMeanPerLvl_DE, aes(x=KD_lacz, y=chimp_human, colour=direction)) + geom_point() + theme_classic() + 
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed") + labs(x="KD vs LacZ log2FC", y = "Chimp vs Human log2FC")
+dev.off()
+```
+
+
+Examples of upregulated genes in KD - up in chimp
+```{r}
+baseMeanPerLvl_res <- merge(baseMeanPerLvl_res, chimp_human_res_df[,"padj", drop=F], by.x="gene_id", by.y="row.names", all.x=T)
+colnames(baseMeanPerLvl_res)[ncol(baseMeanPerLvl_res)] <- "chimp_human_padj"
+baseMeanPerLvl_res <- merge(baseMeanPerLvl_res, crispri_res_df[,c("padj", "gene_id"), drop=F], by="gene_id", all.x=T)
+colnames(baseMeanPerLvl_res)[ncol(baseMeanPerLvl_res)] <- "crispri_padj"
+candidates <- baseMeanPerLvl_res[which(baseMeanPerLvl_res$direction == "Positive congruent (28)" & baseMeanPerLvl_res$crispri_padj < 0.05 & baseMeanPerLvl_res$KD_lacz > 0),"gene_id"]
+```
+padj < 0.05
+
+```{r}
+rownames(baseMeanPerLvl_res) <- baseMeanPerLvl_res$gene_id
+examples_upreg_crispri <- baseMeanPerLvl_res[candidates,c("LacZ", "KD", "human", "chimp")]
+
+examples_upreg_crispri$gene_id <- rownames(examples_upreg_crispri)
+examples_upreg_crispri_melt <- reshape2::melt(examples_upreg_crispri, by=list(examples_upreg_crispri$gene_id))
+
+examples_upreg_crispri_melt <- merge(examples_upreg_crispri_melt, annotation, by="gene_id")
+baseSdPerLvl <- sapply( levels(gene_dds$condition), function(lvl) rowSds(counts(gene_dds,normalized=TRUE)[, gene_dds$condition == lvl], useNames=T))
+rownames(baseSdPerLvl) <- rownames(counts(gene_dds,normalized=TRUE))
+examples_upreg_crispri_sd <- reshape2::melt(baseSdPerLvl[candidates,])
+colnames(examples_upreg_crispri_sd) <- c("gene_id", "group", "sd")
+examples_upreg_crispri_melt <- merge(examples_upreg_crispri_melt, examples_upreg_crispri_sd, by.x=c("gene_id", "variable"), by.y=c("gene_id", "group"))
+examples_upreg_crispri_melt$experiment <- ifelse(examples_upreg_crispri_melt$variable %in% c("chimp", "human"), "chimp_human", "crispri")
+examples_upreg_crispri_melt <- rbind(merge(examples_upreg_crispri_melt[which(examples_upreg_crispri_melt$experiment == "chimp_human"),], chimp_human_res_df[,"padj", drop=F], by.x="gene_id", by.y="row.names", all.x=T),
+                                     merge(examples_upreg_crispri_melt[which(examples_upreg_crispri_melt$experiment == "crispri"),], crispri_res_df[,c("padj", "gene_id"), drop=F], by="gene_id", all.x=T))
+examples_upreg_crispri_melt$padj <- ifelse(!duplicated(examples_upreg_crispri_melt[,c("gene_id", "experiment", "padj")]), format(examples_upreg_crispri_melt$padj, digits=3), NA)
+
+# examples_upreg_crispri_melt <- examples_upreg_crispri_melt[which(examples_upreg_crispri_melt$gene_name %in% c("MAF", "LAMB1", "TIMP3", "DNAH5", "OPTN", "TMEM132B", "LRATD2", "RCAN3")),]
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/boxplot_upreg_crispri_human_chimp.pdf", height = 25, width = 9)
+ggplot(examples_upreg_crispri_melt, aes(x=variable, y=value, fill=variable, label=padj)) + geom_bar(stat="identity", position="dodge") + geom_errorbar(aes(ymin=value-sd, ymax=value+sd), width=.2,
+                 position=position_dodge(.9)) + geom_text() +
+  facet_wrap(.~gene_name+experiment, scales = "free", ncol = 4) + theme_classic() + labs(y="Mean expression", x="")
+dev.off()
+```
+
+
+
+GSEA 
+```{r}
+set.seed(7)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+# genelist <- bitr(dea$gene_name, fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Hs.eg.db")
+# dea_signif <- dea[which(dea$baseMean > 5),]
+# dea_res <- crispri_res_df[which(abs(crispri_res_df$log2FoldChange) > 0.5 & crispri_res_df$padj < 0.05),]
+dea_res <- crispri_res_df
+dea <- dea_res[order(dea_res$log2FoldChange, decreasing = T),]
+
+genelist_FC <- dea$log2FoldChange
+names(genelist_FC) <- dea$gene_name
+genelist_FC <- genelist_FC[!is.na(genelist_FC)]
+
+gse <- gseGO(geneList=genelist_FC, 
+             ont ="MF", 
+             keyType = "SYMBOL", 
+             minGSSize = 3, 
+             maxGSSize = 800, 
+             seed = T, 
+             pvalueCutoff = 0.05,
+             verbose = TRUE, 
+             OrgDb = org.Hs.eg.db, 
+             pAdjustMethod = "BH")
+
+# write.xlsx(gse@result, "/Volumes/MyPassport/FetalCortex/manuscript/November2022/results/gsea_crispri.xlsx")
+# gse@result <- read.xlsx("/Volumes/MyPassport/FetalCortex/manuscript/November2022/results/gsea_crispri_de_genes.xlsx", sheetIndex = 1)
+dotplot(gse, split=".sign") + facet_grid(.~.sign) 
+```
+
+GSEA upreg in KD, upreg in chimp
+```{r}
+set.seed(7)
+upreg_kd_upreg_chimp <- rownames(baseMeanPerLvl_upreg[which(baseMeanPerLvl_upreg$chimp_human > 0 & baseMeanPerLvl_upreg$KD_lacz > 0),])
+# crispri_res_df <- merge(annotation_v38[,c("gene_id", "gene_name")], crispri_res_df, by="gene_id", all.y = T)
+dea <- crispri_res_df[which(crispri_res_df$gene_id %in% upreg_kd_upreg_chimp),]
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+# genelist <- bitr(dea$gene_name, fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Hs.eg.db")
+# dea_signif <- dea[which(dea$baseMean > 5),]
+dea <- dea[order(dea$log2FoldChange, decreasing = T),]
+
+genelist_FC <- dea$log2FoldChange
+names(genelist_FC) <- dea$gene_name
+genelist_FC <- genelist_FC[!is.na(genelist_FC)]
+
+gse <- gseGO(geneList=genelist_FC, 
+             ont ="MF", 
+             keyType = "SYMBOL", 
+             minGSSize = 3, 
+             maxGSSize = 800, 
+             seed = T, 
+             pvalueCutoff = 1,
+             verbose = TRUE, 
+             OrgDb = org.Hs.eg.db, 
+             pAdjustMethod = "BH")
+
+dotplot(gse, split=".sign") + facet_grid(.~.sign) 
+```
+
+
+```{r}
+path <- "/Volumes/MyPassport/l1_manuscript/TEcounts/unique/"
+files <- list.files(path, pattern = "csv")
+files <- files[which(!grepl("summary", files))]
+files <- files[which(grepl("LV", files))]
+samples <- unique(sapply(str_split(files, ".TE_count_matrix_2.csv"), `[[`, 1))
+
+for(i in 1:length(samples)){
+  file <- paste(path, files[i], sep="")
+  sample <- samples[i]
+  
+  tmp <- fread(file, data.table=F)
+  tmp <- tmp[,c("Geneid", "Strand", "Length", colnames(tmp)[ncol(tmp)])]
+  colnames(tmp)[ncol(tmp)] <- sample
+  
+  if(i == 1){
+    crispri_te_count <- tmp
+  }else{
+    if(all(tmp$Geneid == crispri_te_count$Geneid)){
+      crispri_te_count <- cbind(crispri_te_count, tmp[,ncol(tmp),drop=F])  
+    }else{
+      crispri_te_count <- merge(crispri_te_count, tmp, by=c("Geneid", "Strand", "Length"), all=T)  
+    }
+  }
+  print(sample)
+}
+
+rownames(crispri_te_count) <- crispri_te_count$Geneid
+crispri_te_count <- crispri_te_count[,coldata$samples]
+
+outliers <- colnames(crispri_te_count)[which(grepl("LV3627", colnames(crispri_te_count)))] #  | colnames(crispri_gene_count) == "LV3599_1_h6_NPCday14_S9_LINC01876_CRISPRi"
+good_samples <- colnames(crispri_te_count)[which(!colnames(crispri_te_count) %in% outliers)]
+crispri_te_count <- crispri_te_count[,good_samples]
+
+crispri_te_dds <- DESeqDataSetFromMatrix(crispri_te_count, coldata, design = ~ condition)
+crispri_te_dds$condition <- relevel(crispri_te_dds$condition, "LacZ")
+crispri_te_dds <- DESeq(crispri_te_dds)
+crispri_te_res <- lfcShrink(crispri_te_dds, "condition_KD_vs_LacZ")
+View(as.data.frame(crispri_te_res))
+crispri_te_exp <- getAverage(crispri_te_dds)
+jpeg("/Volumes/MyPassport/FetalCortex/manuscript/January2023/plots/meanplot_DEA_TEs_log2FC1.jpeg", res = 500, height = 2000, width = 3000)
+meanPlot_cus(crispri_te_exp$Mean, test=crispri_te_res, l=1, repel = F, p=0.05, c1='KD', c2='LacZ',ttl='TE DEA - LINC01876', col1 = "firebrick", col2 = "steelblue", col3 = "grey35")
+# meanPlot_cus(crispri_te_exp$Mean, test=crispri_te_res, l=2.5, repel = F, p=0.05, c1='KD', c2='LacZ',ttl='TE DEA - LINC01876', col1 = "firebrick", col2 = "steelblue", col3 = "grey35")
+dev.off()
+
+te_annotation <- fread("/Volumes/MyPassport/annotations/human/repeatmasker/hg38_rmsk_TEtranscripts.bed", data.table = F)
+colnames(te_annotation) <- c("chr", "start", "end", "te_id", "dot", "strand", "te_info")
+crispri_te_res_df <- merge(as.data.frame(crispri_te_res), te_annotation, by.x="row.names", by.y="te_id")
+
+crispri_te_res_df_chr2 <- crispri_te_res_df[which(crispri_te_res_df$chr == "chr2"),]
+crispri_te_res_df_chr2$distance_linc01876 <- crispri_te_res_df_chr2$start - 156011530
+crispri_te_res_df_chr2$type <- ifelse(crispri_te_res_df_chr2$log2FoldChange > 1 & crispri_te_res_df_chr2$padj < 0.05, "Upregulated", 
+                              ifelse(crispri_te_res_df_chr2$log2FoldChange < -1 & crispri_te_res_df_chr2$padj < 0.05, "Downregulated", "Not significant"))
+crispri_te_res_df_chr2[which(is.na(crispri_te_res_df_chr2$type)), "type"] <- "Not significant"
+crispri_te_res_df_chr2$type <- paste(crispri_te_res_df_chr2$type, "(", table(crispri_te_res_df_chr2$type)[crispri_te_res_df_chr2$type], ")")
+
+crispri_te_res_df_chr2$label <- ifelse(crispri_te_res_df_chr2$type != "Not significant ( 354840 )", crispri_te_res_df_chr2$Row.names, NA)
+
+library(ggrepel)
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/January2023/plots/manhattan_plot_linc01876_CRISPRi_TE_DEA.pdf", width = 6, height = 4)
+ggplot(crispri_te_res_df_chr2, aes(x=distance_linc01876, y=log2FoldChange, colour = type, label=label)) + geom_point(size=0.5) + geom_hline(yintercept = 0, linetype="dashed", colour="red", size = 0.7, alpha = 0.5) + geom_vline(xintercept = 0, linetype="dashed", colour="red", size = 0.7, alpha = 0.5) + theme_classic() + scale_colour_manual(values = c("Downregulated ( 10 )" = "steelblue", "Not signficant ( 354840 )" = "darkgrey")) + labs(x="Distance to TSS of LINC01876", colour="") + geom_label_repel(box.padding = 1, max.overlaps = 100)
+# dev.off()
+```

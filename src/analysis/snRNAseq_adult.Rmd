@@ -1,0 +1,367 @@
+---
+title: "Single nuclei RNA of healthy adult cortical samples"
+author: "Raquel Garza"
+date: "7/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cell type characterization
+
+We load the seurat object that trusTEr outputs and plot the clustering UMAP
+
+```{r umap}
+library("RColorBrewer")
+library("data.table")
+library("ggpubr")
+library("ggplot2")
+library("Seurat")
+library("stringr")
+library("pheatmap")
+
+healthy <- readRDS("/Volumes/MyPassport/TBI/13.07.21/3_mergeSamples/healthy_all.rds")
+
+tmp <- DotPlot(healthy, "LINC01876", assay= "RNA", group.by = "cellType")
+tmp$data
+
+
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/September2022/plots/linc01876_vlnplot_adult.pdf", height = 4, width = 4)
+# VlnPlot(healthy, "LINC01876", group.by = "cellType") + theme(legend.position = "None")
+# dev.off()
+
+# healthy <- SetIdent(healthy, value = "cellType")
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/adult_hush_complex_featureplot.pdf", width = 14)
+# FeaturePlot(healthy, c("PPHLN1", "MPHOSPH8", "MORC2", "FAM208A", "DNMT1", "SETDB1"), ncol = 3, label = T)
+# dev.off()
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/adult_celltypes.pdf", height = 4)
+# DimPlot(healthy, label = T, label.box = T)
+# dev.off()
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/adult_hush_complex_vlnplot.pdf", width = 10)
+# VlnPlot(healthy, c("PPHLN1","MPHOSPH8","MORC2","FAM208A","DNMT1","SETDB1"), pt.size = 0)
+# dev.off()
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/adult_markers.pdf", width = 14)
+# FeaturePlot(healthy, features = c(excitatory[1], inhibitory[1], astrocyte[1], oligodendrocyte[1], opc[2], microglia[2]), ncol = 3, label=T)
+# dev.off()
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/February2022/plots/cluster_UMAP.pdf", height = 5)
+DimPlot(healthy, group.by = "seurat_clusters", label = T, label.box = T)  + 
+  ggtitle("Clusters") 
+# dev.off()
+table(healthy$orig.ident)
+```
+
+We can check the expression of the different cell types markers in each cluster.
+
+```{r markers}
+# Markers
+neuronal <- c("MAP2", "DCX")
+excitatory <- c("RBFOX3", "GRIN1", "HS3ST2")
+inhibitory <- c("GAD1", "GAD2", "CALB2", "CNR1")
+astrocyte <- c("GFAP", "AQP4", "GJA1", "SLC1A3")
+oligodendrocyte <- c("PLP1", "MOG", "MBP")
+opc <- c("COL9A1", "VCAN", "PDGFRA")
+microglia <- c("P2RY12", "FYB1")
+
+markers <- unique(c(neuronal,
+             excitatory,
+             inhibitory,
+             astrocyte,
+             oligodendrocyte,
+             opc,
+             microglia))
+# Plot them and take note
+DotPlot(healthy, features = markers, scale = F) + theme(axis.text.x = element_text(angle=90, hjust=1)) 
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/January2022/plots/adult_celltype_markers_featureplot.pdf", width = 12)
+FeaturePlot(healthy, features = c(excitatory[1], inhibitory[1], astrocyte[1], oligodendrocyte[1], opc[2], microglia[2]), ncol = 3)
+# dev.off()
+```
+
+After taking note of it, we add this labels to the metadata in the seurat object, visualize it in the UMAP and plot these same markers now grouped by cell type.
+```{r celltypes}
+# Cell type per cluster
+
+coldata_celltypes <- reshape2::melt(list("Excitatory neurons" = as.character(c(0,1,2,9,10,12,15,20)),
+                         "OPC" = as.character(c(18,5)),
+                         "Oligodendrocytes" = as.character(c(6,14,19)),
+                         "Astrocytes" = as.character(c(3,11,13,21)),
+                         "Inhibitory neurons" = as.character(c(4,7,16,8)),
+                         "Microglia" = as.character(c(17))))
+
+colnames(coldata_celltypes) <- c("cluster", "cellType")
+# Cell type colours
+cellType_colours <- colorRampPalette(brewer.pal(7, "Spectral"))(6)
+names(cellType_colours) <- c("Excitatory neurons", "OPC", 
+                             "Astrocytes", "Inhibitory neurons", 
+                             "Oligodendrocytes", "Microglia")
+cellType_colours <- data.frame("colour" = cellType_colours)
+cellType_colours$cellType <- rownames(cellType_colours)
+
+coldata_celltypes <- merge(coldata_celltypes, cellType_colours, by="cellType")
+# Add cell type to Seurat metadata
+tmp <- data.frame(cluster = healthy$seurat_clusters)
+tmp$cellId <- rownames(tmp) 
+tmp <- merge(tmp, coldata_celltypes)
+rownames(tmp) <- tmp$cellId
+healthy <- AddMetaData(healthy, col.name = "cellType", metadata = tmp[,"cellType",drop=F])
+cellType_colours_vector <- cellType_colours[,"colour", ]
+names(cellType_colours_vector) <- cellType_colours$cellType
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/February2022/plots/celltype_UMAP.pdf", height = 5)
+DimPlot(healthy, group.by = "cellType", cols = cellType_colours_vector, label = T, label.box = T)  + 
+                   ggtitle("Cell type")
+# dev.off()
+ratio_celltypes <- FetchData(healthy, c("orig.ident", "cellType"))
+num_celltypes_sample <- as.data.frame(table(ratio_celltypes$orig.ident, ratio_celltypes$cellType))
+
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/ratio_celltypes_adult.pdf")
+ggplot(num_celltypes_sample, aes(x=Var1, y=Freq, fill=Var2)) + geom_bar(stat="identity", position="fill") + theme_classic() + labs(y="Ratio of nuclei", x="Sample", fill="Cell type")
+# dev.off()
+
+DotPlot(healthy, features = markers, group.by = "cellType") +  scale_color_gradient(low = "white", high = "firebrick") +
+  labs(y="Cell type", x="") + theme(axis.text.x = element_text(angle=90, hjust=1)) 
+```
+
+Here we annotate the section of the cortex the sample is from and check the sample composition per cell type
+```{r section}
+# Add section to Seurat's metadata
+tmp <- data.frame(sample = healthy$orig.ident)
+tmp$cellId <- rownames(tmp)
+tmp <- merge(tmp, data.frame(sample=unique(healthy$orig.ident),
+                             type=ifelse(unique(healthy$orig.ident) == "Seq109_11", "Frontal (501)", 
+                                              ifelse(unique(healthy$orig.ident) == "Seq109_12", "Temporal (501)", 
+                                                     ifelse(unique(healthy$orig.ident) == "Seq109_13", "Frontal (529)", 
+                                                            ifelse(unique(healthy$orig.ident) == "Seq109_14", "Temporal (529)", "Temporal (502)"))))), by="sample")
+rownames(tmp) <- tmp$cellId
+healthy <- AddMetaData(healthy, col.name = "TissueType", metadata = tmp[,"type",drop=F])
+# Time points / Samples colours
+sample_colours <- colorRampPalette(brewer.pal(5, "Paired"))(5)
+names(sample_colours) <- c("Frontal (501)", "Temporal (501)",
+                           "Frontal (529)",
+                           "Temporal (529)",
+                           "Temporal (502)")
+
+# Plot umap of cell type and time point
+DimPlot(healthy, group.by = "TissueType", cols = sample_colours)  + 
+  theme(axis.text.x = element_text(angle=45, vjust = 1, hjust = 1)) + 
+  ggtitle("Tissue type") + guides(colour = guide_legend(override.aes = list(size = 7)))
+
+# How is the sample distribution among the different cell types?
+sample_composition_n_cells <- FetchData(healthy, vars = c("TissueType", "cellType")) %>%
+  dplyr::count(TissueType, cellType)
+
+sample_composition_n_cells$TissueType <- factor(sample_composition_n_cells$TissueType, levels=c("Frontal (501)", "Temporal (501)",
+                                                                                                "Frontal (529)",
+                                                                                                "Temporal (529)",
+                                                                                                "Temporal (502)"))
+
+ggplot(sample_composition_n_cells, aes(x=cellType, y=n, fill=TissueType))+geom_bar(stat = 'identity', position="fill", width = 0.8) +
+  theme_classic() + scale_fill_manual(values = sample_colours) + labs(y="Ratio of sample's cells in cell type", x="", fill="") +
+  coord_flip()
+
+```
+
+## TE expression
+
+TrusTEr saves TE quantification in the assay `TE_norm_cluster_size`. We can access it and directly use all plot functions of Seurat.
+
+The user should remember that the quantification was performed in a cluster level and this is merely a way of plotting.
+```{r}
+# pdf("/Volumes/My Passport/linc00662/plots/linc00662_adult.pdf", height = 5, width = 10)
+# VlnPlot(healthy, "LINC00662", assay = "RNA", group.by= "cellType", split.by = "orig.ident", pt.size = 0)# + scale_fill_manual(label = c("Seq109_11" = "87 years old (F)",
+#                                                       # "Seq109_12" = "87 years old (T)",
+#                                                       # "Seq109_13" = "69 years old (F)",
+#                                                       # "Seq109_14" = "69 years old (T)",
+#                                                       # "Seq109_6" = "75 years old (T)"))
+# dev.off()
+```
+
+```{r l1pa2}
+DefaultAssay(healthy) <- "TE_norm_cluster_size"
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/January2023/plots/young_L1s_adult.pdf", width = 14, height=3)
+# FeaturePlot(healthy, features = c("L1HS:L1:LINE","L1PA2:L1:LINE","L1PA3:L1:LINE","L1PA4:L1:LINE"), keep.scale = "all", ncol=4)
+# dev.off()
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/December2021/plots/young_old_L1s_adult.pdf", width = 20)
+# FeaturePlot(healthy, features = c("L1HS:L1:LINE", "L1PA3:L1:LINE", "L1PA5:L1:LINE", "L1PA7:L1:LINE","L1PA10:L1:LINE", "L1PA2:L1:LINE","L1PA4:L1:LINE", "L1PA6:L1:LINE", "L1PA8:L1:LINE", "L1PA11:L1:LINE"), keep.scale = "all", ncol = 5)
+FeaturePlot(healthy, features = c("L1HS:L1:LINE", "L1MEb:L1:LINE"), keep.scale = "all",  ncol = 1)
+FeaturePlot(healthy, features = c("L1PA2:L1:LINE",  "L1ME3E:L1:LINE"), keep.scale = "all",  ncol = 1)
+FeaturePlot(healthy, features = c("L1PA3:L1:LINE", "L1MA8:L1:LINE"), keep.scale = "all",  ncol = 1)
+FeaturePlot(healthy, features = c("L1PA4:L1:LINE", "L1MEf:L1:LINE"), keep.scale = "all",  ncol = 1)
+
+# dev.off()
+
+TE_counts_all <- fread("/Volumes/My Passport/FetalCortex/13.07.21/3_combinedUMAP_perCluster/clusterPipeline/TE_counts_normalized/multiple/all_TE_norm_cluster_size_matrix_w_genes.csv", data.table = F)
+
+```
+
+### TEs and cell types
+
+The Seurat object trusTEr outputs contains three assays with the TE quantification: 
+
+- `TE_raw` for no normalization
+- `TE_norm_cluster_size` for the quantification to be normalized by cluster size
+- `TE_norm_cluster_size_num_reads` for the quantification to be normalized by cluster size and sequencing depth of the sample 
+
+The last one not applicable if you merged the samples previous to the quantification.
+
+Each assay contains the cluster expression value repeated in all cells that are contained in it.
+
+This is useful when using `DimPlot`, `FeaturePlot`, and plotting functions that require a value per cell. However, if we want to create plots on a cluster level and test the differences between them, it's handier to use the matrices files that are generated in the `TE_counts_normalized` directory (`TE_raw_matrix.csv`, `TE_norm_cluster_size_matrix.csv` or `TE_norm_cluster_size_num_reads_matrix.csv` accordingly). 
+
+Here we read these matrix files and plot the mean expression of L1HS, L1PA2, L1PA3, L1PA4 and L1PA5 in each sample (as we are using the `TE_norm_cluster_size_matrix.csv` matrices).
+
+```{r TE_celltype}
+path <- "/Volumes/My Passport/TBI/13.07.21/3_mergeSamples/clusterPipeline_grouped/TE_counts_normalized/multiple/"
+files <- list.files(path)[which(grepl("TE_norm_cluster_size_matrix.csv", list.files(path)))]
+
+counts <- list()
+for(file in files){
+  count_matrix <- fread(paste(path, file, sep = ""), data.table=F)
+  rownames(count_matrix) <- count_matrix$te_id
+  l1 <- reshape2::melt(count_matrix[c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE", "L1PA5:L1:LINE"),])
+  l1$cluster <- sapply(str_split(l1$variable, ".cluster_"), `[[`, 2)
+  l1 <- merge(l1, coldata_celltypes, by="cluster")
+  l1_aggr <- aggregate(l1$value, by=list(l1$cluster, l1$cellType), FUN=mean)
+  colnames(l1_aggr) <- c("cluster", "cellType", "value")
+  sample_name <- sapply(str_split(file, "_TE_norm_cluster_size_matrix.csv"), `[[`, 1)
+  l1_aggr$sample <- sample_name
+  counts[[sample_name]] <- l1_aggr
+}
+
+seq109_l1 <- do.call(rbind, counts)
+
+seq109_l1$sample <- factor(seq109_l1$sample, levels=c("Seq109_13", "Seq109_14", "Seq109_6", "Seq109_11", "Seq109_12"))
+# pdf("/Users/student/Documents/tmp.pdf", width=22, height=4)
+ggplot(seq109_l1, aes(x=cellType, y=log2(value+0.5), fill=cellType, colour=cellType)) + geom_boxplot() +
+  facet_wrap(.~sample, labeller = labeller(sample = c("Seq109_11" = "87 years old (F)",
+                                                      "Seq109_12" = "87 years old (T)",
+                                                      "Seq109_13" = "69 years old (F)",
+                                                      "Seq109_14" = "69 years old (T)",
+                                                      "Seq109_6" = "75 years old (T)")), ncol=5)  +
+  theme_classic() +
+  theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank()) +
+  scale_fill_manual(values= c("Oligodendrocytes" = "#A8DB94",
+                              "Astrocytes" = "#FEEC9F",
+                              "Excitatory neurons" = "#D53E4F",
+                              "Inhibitory neurons" = "#9c64b0",
+                              "Microglia" = "#3288BD",
+                              "OPC" = "#FC9D63")) +
+  scale_colour_manual(values= c("Oligodendrocytes" = "#3b6e26",
+                              "Astrocytes" = "#8c7924",
+                              "Excitatory neurons" = "#661721",
+                              "Inhibitory neurons" = "#582a69",
+                              "Microglia" = "#10405e",
+                              "OPC" = "#783d19")) +
+  labs(fill = "Cell type", y= "log2(mean (Normalized cluster\nexpression) + 0.5)")  
+ # dev.off()
+```
+
+To test if the difference between neurons and the rest of the cell types is significant:
+
+```{r TE_neurons_rest}
+seq109_l1$neurons <- ifelse(endsWith(seq109_l1$cellType, "neurons"), "Neurons", "Glia")
+seq109_l1_tmp <- seq109_l1[which(seq109_l1$cellType != "Microglia"),]
+# pdf("/Users/student/Documents/tmp.pdf", width=22, height=4)
+ggplot(seq109_l1_tmp, aes(x=neurons, y=log2(value+0.5), fill=neurons)) + geom_boxplot() +
+  facet_wrap(.~sample, labeller = labeller(sample = c("Seq109_11" = "87 years old (F)",
+                                                      "Seq109_12" = "87 years old (T)",
+                                                      "Seq109_13" = "69 years old (F)",
+                                                      "Seq109_14" = "69 years old (T)",
+                                                      "Seq109_6" = "75 years old (T)")), ncol=5)  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(mean (Normalized cluster\nexpression) + 0.5)") + stat_compare_means(size=7, label = "p.signif", label.y.npc = 0.9, label.x.npc = 0.5)
+# dev.off()
+
+
+path <- "/Volumes/My Passport/TBI/13.07.21/3_mergeSamples/clusterPipeline_grouped/TE_counts_normalized/multiple/"
+files <- list.files(path)[which(grepl("TE_norm_cluster_size_matrix.csv", list.files(path)))]
+counts <- list()
+for(file in files){
+  count_matrix <- fread(paste(path, file, sep = ""), data.table=F)
+  rownames(count_matrix) <- count_matrix$te_id
+  l1 <- reshape2::melt(count_matrix[c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE", "L1MEb:L1:LINE", "L1ME3E:L1:LINE", "L1MA8:L1:LINE", "L1MEf:L1:LINE"),])
+  l1$cluster <- sapply(str_split(l1$variable, ".cluster_"), `[[`, 2)
+  l1 <- merge(l1, coldata_celltypes, by="cluster")
+  sample_name <- sapply(str_split(file, "_TE_norm_cluster_size_matrix.csv"), `[[`, 1)
+  l1$sample <- sample_name
+  counts[[sample_name]] <- l1
+}
+seq109_l1 <- do.call(rbind, counts)
+seq109_l1$cellType <- factor(seq109_l1$cellType, levels=c("Excitatory neurons", "Inhibitory neurons", "OPC", "Oligodendrocytes", "Astrocytes", "Microglia"))
+seq109_l1$te_id <- factor(seq109_l1$te_id, levels=c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE", "L1MEb:L1:LINE", "L1ME3E:L1:LINE", "L1MA8:L1:LINE", "L1MEf:L1:LINE"))
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/December2021/plots/L1HS_L1PA10_adult_per_celltype.pdf", width=14)
+ggplot(seq109_l1, aes(x=cellType, y=log2(value+0.5), fill=cellType)) + geom_boxplot() +
+  facet_wrap(.~te_id)  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") 
+# dev.off()
+
+seq109_l1$neurons <- ifelse(endsWith(as.character(seq109_l1$cellType), "neurons"), "Neurons", "Glia")
+seq109_l1 <- seq109_l1[which(seq109_l1$cellType != "Microglia"),]
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/January2022/plots/young_old_L1s_adult_neurons_glia.pdf", width=14)
+ggplot(seq109_l1, aes(x=neurons, y=log2(value+0.5), fill=neurons)) + geom_boxplot() +
+  facet_wrap(.~te_id, ncol = 4)  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") 
+# dev.off()
+```
+
+Here we want to compare the expression levels from young vs old L1s in a sample
+
+```{r L1s_per_sample}
+L1s <- fread("/Volumes/My Passport/brain_dev/manuscript/L1s.txt", header = F, data.table = F)[,1]
+seq109_14_counts <- fread(paste(path, "Seq109_14_TE_norm_cluster_size_matrix.csv", sep=""), data.table=F)
+rownames(seq109_14_counts) <- seq109_14_counts$te_id
+
+seq109_14_counts_l1s <- seq109_14_counts[L1s,]
+
+coldata_celltypes <- coldata_celltypes[order(match(coldata_celltypes$cellType, c("Excitatory neurons", "Inhibitory neurons", "Astrocytes", "Oligodendrocytes", "OPC", "Microglia")),
+                                             match(coldata_celltypes$cluster, sort(as.numeric(coldata_celltypes$cluster)))),]
+
+rownames(coldata_celltypes) <- paste("healthy_Seq109_14.cluster_", coldata_celltypes$cluster, sep="")
+
+pheatmap(log2(seq109_14_counts_l1s[,rownames(coldata_celltypes)]+0.5), cluster_rows = F, cluster_cols = F, 
+       annotation_col = coldata_celltypes[,c("cellType"), drop=F], labels_row = sapply(str_split(rownames(seq109_14_counts_l1s), ":"), `[[`, 1),
+       labels_col = sapply(str_split(colnames(seq109_14_counts_l1s[,rownames(coldata_celltypes)]), "cluster_"), `[[`, 2))
+
+```
+
+## Percentage of counts in genes vs TEs
+```{r}
+all_TE_norm_cluster_size_matrix_w_genes <- fread("/Volumes/My Passport/TBI/13.07.21/3_mergeSamples/clusterPipeline/TE_counts_normalized/multiple/all_TE_norm_cluster_size_matrix_w_genes.csv", data.table = F)
+gene_te_reads <- data.frame(Gene = colSums(all_TE_norm_cluster_size_matrix_w_genes[which(startsWith(all_TE_norm_cluster_size_matrix_w_genes$te_id, "ENS")), colnames(all_TE_norm_cluster_size_matrix_w_genes)[-1]]),
+                            TE = colSums(all_TE_norm_cluster_size_matrix_w_genes[which(!startsWith(all_TE_norm_cluster_size_matrix_w_genes$te_id, "ENS")), colnames(all_TE_norm_cluster_size_matrix_w_genes)[-1]]))
+gene_te_reads$sample <- rownames(gene_te_reads)
+gene_te_reads <- reshape2::melt(gene_te_reads)
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/January2022/plots/num_reads_genes_TEs_adult_singlecell.pdf")
+ggplot(gene_te_reads, aes(x=sample, y=value, fill=variable)) + geom_bar(stat="identity") + theme_classic() + labs(x="Sample", y="Number of reads quantified", fill = "Type") + theme(axis.text.x = element_text(angle=90, hjust=1)) 
+# dev.off()
+```

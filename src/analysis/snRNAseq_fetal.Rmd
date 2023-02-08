@@ -1,0 +1,457 @@
+---
+title: "Single cell/nuclei RNA of fetal cortex samples"
+author: "Raquel Garza"
+date: "7/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cell type characterization
+
+We load the seurat object that trusTEr outputs and plot the clustering UMAP
+
+```{r umap}
+library("RColorBrewer")
+library("data.table")
+library("ggpubr")
+library("ggplot2")
+library("Seurat")
+library("stringr")
+library("pheatmap")
+
+fetal <- readRDS("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCluster/fetalcortex_merged_cluster.rds")
+DefaultAssay(fetal) <- "RNA"
+# fetal <- ScaleData(fetal)
+# gfap_heatmap <- DoHeatmap(fetal, "GFAP", group.by = "orig.ident")
+# gfap_heatmap_df <- reshape2::dcast(gfap_heatmap$data, formula = Feature~Cell, value.var = "Expression")
+# rownames(gfap_heatmap_df) <- gfap_heatmap_df[,1]
+# gfap_heatmap_df <- gfap_heatmap_df[,-1]
+# gfap_heatmap_annot <- FetchData(fetal, c("orig.ident"))
+# col.pal <- RColorBrewer::brewer.pal(9, "Reds")
+# pdf("~/Desktop/gfap_fetal.pdf", height = 3)
+# pheatmap(gfap_heatmap_df[,rownames(gfap_heatmap_annot)], cluster_rows = F, cluster_cols = F, show_colnames = F, annotation_col = gfap_heatmap_annot[rownames(gfap_heatmap_annot),, drop=F], color = col.pal)
+# dev.off()
+# Radial glia markers
+# FeaturePlot(fetal, c("FABP7", "NHLRC2"))
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/April2022/plots/cluster_UMAP_development.pdf", height = 6)
+DimPlot(fetal, group.by = "seurat_clusters", label = T, label.box = T)  + 
+  ggtitle("Clusters") 
+# dev.off()
+```
+
+We can check the expression of the different cell types markers in each cluster.
+
+```{r markers}
+neuronal <- c("DCX")
+deeplayer <- c("TBR1", "BCL11B", "STMN2", "NEUROD6")
+interneurons <- c("GAD1", "DLX2")
+cajalretzius <- c("RELN")
+proliferating <- c("PAX6", "SOX2", "PCNA")
+basalprog <- c("EOMES", deeplayer) 
+microglia <- c("AIF1", "TMEM119")
+radial_glia <- c("FABP7", "NHLRC2")
+markers <- unique(c(deeplayer, basalprog, proliferating, radial_glia, cajalretzius, interneurons, microglia, neuronal))
+
+DotPlot(fetal, features = markers, scale = T, assay = "RNA") + theme(axis.text.x = element_text(angle=90, hjust=1)) 
+# 
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/fetal_markers.pdf", width = 16)
+# # pdf("/Volumes/My Passport/FetalCortex/manuscript/April2022/plots/fetal_celltype_markers_featureplot.pdf", width = 12)
+FeaturePlot(fetal, features = c(deeplayer[2], interneurons[1], cajalretzius, proliferating[3], basalprog[1], microglia[1]), ncol = 3, label = T)
+# dev.off()
+```
+
+After taking note of it, we add this labels to the metadata in the seurat object, visualize it in the UMAP and plot these same markers now grouped by cell type.
+```{r celltypes}
+coldata_celltypes <- reshape2::melt(list("Early born neurons" = as.character(c(2,4)),
+                    "Basal progenitors" = as.character(c(1,5)),
+                    "Apical progenitors" = as.character(c(0,3,6,9)),
+                    "Interneurons" = as.character(c(7)),
+                    "Cajal Retzius" = as.character(c(8)),
+                    "Microglia" = as.character(c(10))))
+
+# coldata_celltypes <- reshape2::melt(list("Early born neurons" = as.character(c(7,8,9,11, 3)),
+#                     "Basal progenitors" = as.character(c(2,13, 17)),
+#                     "Apical progenitors" = as.character(c(0,1,4,5,6,10,12,14,15)),
+#                     "Interneurons" = as.character(c(16)),
+#                     "Cajal Retzius" = as.character(c(18)),
+#                     "Microglia" = as.character(19)))
+
+colnames(coldata_celltypes) <- c("cluster", "cellType")
+
+# Cell type colours
+cellType_colours <- colorRampPalette(brewer.pal(6, "Spectral"))(6)
+names(cellType_colours) <- c("Early born neurons", "Basal progenitors", 
+                             "Apical progenitors", "Interneurons", 
+                             "Cajal Retzius", "Microglia")
+cellType_colours <- data.frame("colour" = cellType_colours)
+cellType_colours$cellType <- rownames(cellType_colours)
+
+coldata_celltypes <- merge(coldata_celltypes, cellType_colours, by="cellType")
+
+# Add cell type to Seurat metadata
+tmp <- data.frame(cluster = fetal$seurat_clusters)
+tmp$cellId <- rownames(tmp) 
+tmp <- merge(tmp, coldata_celltypes)
+rownames(tmp) <- tmp$cellId
+fetal <- AddMetaData(fetal, col.name = "cellType", metadata = tmp[,"cellType",drop=F])
+cellType_colours_vector <- cellType_colours[,"colour", ]
+names(cellType_colours_vector) <- cellType_colours$cellType
+
+ratio_celltypes <- FetchData(fetal, c("orig.ident", "cellType"))
+num_celltypes_sample <- as.data.frame(table(ratio_celltypes$orig.ident, ratio_celltypes$cellType))
+
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/ratio_celltypes_fetal.pdf")
+ggplot(num_celltypes_sample, aes(x=Var1, y=Freq, fill=Var2)) + geom_bar(stat="identity", position="fill") + theme_classic() + labs(y="Ratio of nuclei", x="Sample", fill="Cell type")
+# dev.off()
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/April2022/plots/celltype_UMAP_development.pdf", height = 5)
+DimPlot(fetal, group.by = "cellType", cols = cellType_colours_vector, label = T, label.box = T)  + 
+                   ggtitle("Cell type")
+# dev.off()
+DotPlot(fetal, features = markers, group.by = "cellType") +  scale_color_gradient(low = "white", high = "firebrick") +
+  labs(y="Cell type", x="") + theme(axis.text.x = element_text(angle=90, hjust=1)) 
+
+# fetal <- SetIdent(fetal, value = "cellType")
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/fetal_hush_complex_featureplot.pdf", width = 14)
+# FeaturePlot(fetal, c("PPHLN1", "MPHOSPH8", "MORC2", "FAM208A", "DNMT1", "SETDB1"), ncol = 3, label = T, min.cutoff = 0.2)
+# dev.off()
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/fetal_hush_complex_vlnplot_per_sample.pdf", width = 14)
+# ggarrange(VlnPlot(fetal, c("PPHLN1"), pt.size = 0, split.by = "TimePoint"),
+#           VlnPlot(fetal, c("MPHOSPH8"), pt.size = 0, split.by = "TimePoint"),
+#           VlnPlot(fetal, c("MORC2"), pt.size = 0, split.by = "TimePoint"),
+#           VlnPlot(fetal, c("FAM208A"), pt.size = 0, split.by = "TimePoint"),
+#           VlnPlot(fetal, c("DNMT1"), pt.size = 0, split.by = "TimePoint"),
+#           VlnPlot(fetal, c("SETDB1"), pt.size = 0, split.by = "TimePoint"), common.legend = T, legend = "right")
+# dev.off()
+# pdf("/Volumes/MyPassport/FetalCortex/For_Chris/fetal_celltypes.pdf", height = 4)
+# DimPlot(fetal, label = T, label.box = T)
+# dev.off()
+
+# DefaultAssay(fetal) <- "RNA"
+# fetal <- SetIdent(fetal, value = "cellType")
+# FeaturePlot(fetal, c("FAM208A", "MORC2", "PPHLN1", "MPHOSPH8", "SETDB1"), keep.scale = "all", label = T)
+# pdf("~/Desktop/fetal_epigenetic_regulators_umap.pdf", height = 20, width = 20)
+# FeaturePlot(fetal, c("TRIM28", "MORC2", "FAM208A", "METTL3", "METTL14", "SETDB1", "DNMT1", "DNMT3A", "DNMT3B", "ZNF91", "MORC3", "ZNF638", "RPRD2","ST20", "SUPT6H","SAFB", "SUV39H1","SUV39H2", "CBX1", "EHMT2"), keep.scale = "all", label = T)
+# dev.off()
+# 
+# pdf("~/Desktop/fetal_epigenetic_regulators_violins.pdf", height = 20, width = 14)
+# VlnPlot(fetal, c("TRIM28", "MORC2", "FAM208A", "METTL3", "METTL14", "SETDB1", "DNMT1", "DNMT3A", "DNMT3B", "ZNF91", "MORC3", "ZNF638", "RPRD2","ST20", "SUPT6H","SAFB", "SUV39H1","SUV39H2", "CBX1", "EHMT2"), pt.size = 0)
+# dev.off()
+
+```
+
+Here we annotate the age of the sample and check the sample composition per cell type
+```{r timepoint}
+# Add time point (age of the embryo) to Seurat's metadata
+tmp <- data.frame(sample = fetal$orig.ident)
+tmp$cellId <- rownames(tmp)
+tmp <- merge(tmp, data.frame(sample=unique(fetal$orig.ident),
+                             timepoint=ifelse(unique(fetal$orig.ident) == "DA103", "7 weeks 4 days", 
+                                              ifelse(unique(fetal$orig.ident) == "DA094", "8 weeks", 
+                                                     ifelse(unique(fetal$orig.ident) == "DA140", "8 weeks 6 days", 
+                                                            ifelse(unique(fetal$orig.ident) == "Seq095_2", "10 weeks 3 days\n(sample 1)", "10 weeks 3 days\n(sample 2)"))))), by="sample")
+rownames(tmp) <- tmp$cellId
+fetal <- AddMetaData(fetal, col.name = "TimePoint", metadata = tmp[,"timepoint",drop=F])
+
+# Time points / Samples colours
+sample_colours <- colorRampPalette(brewer.pal(5, "Paired"))(5)
+names(sample_colours) <- c("10 weeks 3 days\n(sample 2)", "10 weeks 3 days\n(sample 1)",
+                           "8 weeks 6 days",
+                           "8 weeks",
+                           "7 weeks 4 days")
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/December2021/plots/UMAP_per_sample.pdf", width = 7, height = 5)
+DimPlot(fetal, group.by = "TimePoint", cols = sample_colours)  + 
+         ggtitle("Time point") 
+# dev.off()
+
+sample_composition_n_cells <- FetchData(fetal, vars = c("TimePoint", "cellType")) %>%
+                                        dplyr::count(TimePoint, cellType)
+sample_composition_n_cells$TimePoint <- factor(sample_composition_n_cells$TimePoint, levels=c("10 weeks 3 days\n(sample 2)", "10 weeks 3 days\n(sample 1)",
+                                                                                              "8 weeks 6 days",
+                                                                                              "8 weeks",
+                                                                                              "7 weeks 4 days"))
+
+ggplot(sample_composition_n_cells, aes(x=cellType, y=n, fill=TimePoint))+ geom_bar(stat = 'identity', position="fill", width=0.7) +
+  theme_classic() + scale_fill_manual(values = sample_colours) + labs(y="Ratio of sample's cells in cell type", x="", fill="") +
+  coord_flip()
+
+
+# pdf("/Volumes/My Passport/linc00662/plots/linc00662_braindev.pdf", height = 5, width = 10)
+# VlnPlot(fetal, assay="RNA", features="LINC00662", group.by = "cellType", split.by = "TimePoint", pt.size = 0)
+# dev.off()
+```
+
+## Cell cycle
+
+Using Seurat's `CellCycleScoring` function, we define the different phases of the cell cycle in our samples. 
+
+Although Seurat's module cannot tell us with 100% certainty if a cell is in G1 or G0, all non-cycling cells have to be in this group. Therefore, we will label G1/G0 as non-cycling and S/M as cycling.
+
+```{r cellcycle}
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+fetal <- CellCycleScoring(fetal, s.features = s.genes, g2m.features = g2m.genes, set.ident = F, assay="RNA")
+fetal <- AddMetaData(fetal, metadata = ifelse(fetal$Phase == "G1", "non-cycling", "cycling"), col.name = "cellCycle")
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/April2022/plots/cellcycle_UMAP.pdf", height=5)
+DimPlot(fetal, group.by = "cellCycle", cols = c("tan1", "lightsteelblue3"), label = T, label.box = T)
+# dev.off()
+cellcycle_barcodes <- FetchData(fetal, c("orig.ident", "seurat_clusters", "cellCycle"))
+cellcycle_barcodes$name <- paste(cellcycle_barcodes$orig.ident, "merged.clusters", cellcycle_barcodes$seurat_clusters, cellcycle_barcodes$cellCycle, sep="_")
+
+table(cellcycle_barcodes$seurat_clusters, cellcycle_barcodes$cellCycle)
+cellcycle_barcodes$barcode <- sapply(str_split(rownames(cellcycle_barcodes), paste(cellcycle_barcodes$orig.ident, "_", sep="")), `[[`, 2)
+cellcycle_barcodes_list <- split(cellcycle_barcodes, f=cellcycle_barcodes$name)
+# sapply(names(cellcycle_barcodes_list), 
+#  function (x) write.table(cellcycle_barcodes_list[[x]]$barcode, quote=F , row.names = F, col.names = F, file=paste("/Volumes/My Passport/FetalCortex/13.07.21/3_mergeSamples_cellCycle/", x, ".tsv", sep="") )   )
+```
+
+## TE expression
+
+TrusTEr saves TE quantification in the assay `TE_norm_cluster_size`. We can access it and directly use all plot functions of Seurat.
+
+The user should remember that the quantification was performed in a cluster level and this is merely a way of plotting.
+
+```{r l1pa2}
+DefaultAssay(fetal) <- "TE_norm_cluster_size"
+
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/January2023/plots/young_L1s_braindev.pdf", width = 14, height=3)
+FeaturePlot(fetal, features = c("L1HS:L1:LINE","L1PA2:L1:LINE","L1PA3:L1:LINE","L1PA4:L1:LINE"), keep.scale = "all", ncol=4)
+dev.off()
+```
+
+### TEs and cell types
+
+The Seurat object trusTEr outputs contains three assays with the TE quantification: 
+
+- `TE_raw` for no normalization
+- `TE_norm_cluster_size` for the quantification to be normalized by cluster size
+- `TE_norm_cluster_size_num_reads` for the quantification to be normalized by cluster size and sequencing depth of the sample 
+
+The last one not applicable if you merged the samples previous to the quantification.
+
+Each assay contains the cluster expression value repeated in all cells that are contained in it.
+
+This is useful when using `DimPlot`, `FeaturePlot`, and plotting functions that require a value per cell. However, if we want to create plots on a cluster level and test the differences between them, it's handier to use the matrices files that are generated in the `TE_counts_normalized` directory (`TE_raw_matrix.csv`, `TE_norm_cluster_size_matrix.csv` or `TE_norm_cluster_size_num_reads_matrix.csv` accordingly). 
+
+Here we read these matrix files and plot the mean expression of L1HS, L1PA2, L1PA3, L1PA4 and L1PA5 in each sample (as we are using the `TE_norm_cluster_size_matrix.csv` matrices).
+
+```{r}
+# Getting Boxplot of neurons vs progenitors (and a second one with all cell types) of old and young L1 expression per cluster
+# count_matrix_per_cluster <- fread("/Volumes/My Passport/FetalCortex/13.07.21/3_combinedUMAP_perCluster/clusterPipeline/TE_counts_normalized/multiple/all_TE_norm_cluster_size_matrix.csv", data.table=F)
+count_matrix_per_cluster <- fread("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCluster/clusterPipeline_per_cluster/TE_counts_normalized/multiple/merged_cluster_TE_norm_cluster_size_matrix.csv", data.table=F)
+rownames(count_matrix_per_cluster) <- count_matrix_per_cluster$te_id
+l1_boxplot_per_cluster <- reshape2::melt(count_matrix_per_cluster[c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE"),])# , "L1MEb:L1:LINE", "L1ME3E:L1:LINE", "L1MA8:L1:LINE", "L1MEf:L1:LINE"
+l1_boxplot_per_cluster$cluster <- sapply(str_split(l1_boxplot_per_cluster$variable, ".cluster_"), `[[`, 2)
+l1_boxplot_per_cluster <- merge(l1_boxplot_per_cluster, coldata_celltypes, by="cluster")
+
+l1_boxplot_per_cluster$te_id <- factor(l1_boxplot_per_cluster$te_id, levels=c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE")) # , "L1MEb:L1:LINE", "L1ME3E:L1:LINE", "L1MA8:L1:LINE", "L1MEf:L1:LINE"
+
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/young_old_L1s_braindev_per_cluster_celltype.pdf", width=9)
+ggplot(l1_boxplot_per_cluster, aes(x=cellType, y=log2(value+0.5), fill=cellType)) + geom_boxplot() +
+  facet_wrap(.~te_id, ncol=2, scales = "free_y")  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+# dev.off()
+
+l1_boxplot_per_cluster_barplot <- aggregate(l1_boxplot_per_cluster$value, by=list(l1_boxplot_per_cluster$te_id, l1_boxplot_per_cluster$cellType, l1_boxplot_per_cluster$colour), FUN=mean)
+colnames(l1_boxplot_per_cluster_barplot) <- c("te_id", "cellType", "colour", "mean")
+l1_boxplot_per_cluster_barplot$sd <- aggregate(l1_boxplot_per_cluster$value, by=list(l1_boxplot_per_cluster$te_id, l1_boxplot_per_cluster$cellType, l1_boxplot_per_cluster$colour), FUN=sd)[,"x"]
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/young_old_L1s_braindev_per_cluster_celltype.pdf", width=9)
+ggplot(l1_boxplot_per_cluster_barplot, aes(x=cellType, y=mean, fill=cellType)) + geom_bar(stat = "identity", position = "dodge") + geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.2,
+                 position=position_dodge(.9)) +
+  facet_wrap(.~te_id, ncol=2, scales = "free_y")  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "Normalized expression") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+dev.off()
+
+# Compare neurons vs progenitors and without microglia
+l1_boxplot_per_cluster$neurons <- ifelse(endsWith(as.character(l1_boxplot_per_cluster$cellType), "neurons"), "Neurons", "Progenitors")
+l1_boxplot_per_cluster_no_microglia <- l1_boxplot_per_cluster[which(l1_boxplot_per_cluster$cellType != "Microglia"),]
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/January2022/plots/young_old_L1s_braindev_per_cluster_neurons_progenitors.pdf", width=11)
+ggplot(l1_boxplot_per_cluster_no_microglia, aes(x=neurons, y=log2(value+0.5), fill=neurons)) + geom_boxplot() +
+  facet_wrap(.~te_id, ncol=4)  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+# dev.off()
+```
+Creating lists of barcodes for cellcycle
+```{r}
+sample_cellcycle <- FetchData(fetal, vars = c("orig.ident", "cellCycle"))
+sample_cellcycle_list <- split.data.frame(x = sample_cellcycle, f = list(sample_cellcycle$orig.ident, sample_cellcycle$cellCycle))
+
+for(i in names(sample_cellcycle_list)){
+  sample <- sapply(str_split(i, "[[.]]"), `[[`, 1)
+  state <- sapply(str_split(i, "[[.]]"), `[[`, 2)
+  barcodes <- sapply(str_split(rownames(sample_cellcycle_list[[i]]), paste(sample, "_", sep="")), `[[`, 2)
+  write.table(barcodes, paste("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCellCycle/", sample , "_merged.clusters_", state, ".tsv", sep=""), row.names = F, col.names = F, quote = F)
+}
+```
+
+Creating lists of barcodes for cellcycle/cluster
+```{r}
+sample_cellcycle_cluster <- FetchData(fetal, vars = c("orig.ident", "cellCycle", "seurat_clusters"))
+sample_cellcycle_cluster_list <- split.data.frame(x = sample_cellcycle_cluster, f = list(sample_cellcycle_cluster$orig.ident, sample_cellcycle_cluster$cellCycle, sample_cellcycle_cluster$seurat_clusters))
+
+for(i in names(sample_cellcycle_cluster_list)){
+  sample <- sapply(str_split(i, "[[.]]"), `[[`, 1)
+  state <- sapply(str_split(i, "[[.]]"), `[[`, 2)
+  cluster <- sapply(str_split(i, "[[.]]"), `[[`, 3)
+  barcodes <- sapply(str_split(rownames(sample_cellcycle_cluster_list[[i]]), paste(sample, "_", sep="")), `[[`, 2)
+  write.table(barcodes, paste("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCluster_perCellCycle/", sample , "_merged.clusters_", cluster,  "_", state, ".tsv", sep=""), row.names = F, col.names = F, quote = F)
+}
+```
+
+
+```{r}
+# Here we do something similar, but we want to keep it separately per sample (we ran trusTEr again with groups per samples)
+# path <- "/Volumes/My Passport/FetalCortex/13.07.21/3_combinedUMAP_perCluster/clusterPipeline_grouped/TE_counts_normalized/multiple/"
+path <- "/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCluster/clusterPipeline_per_cluster/TE_counts_normalized/multiple/"
+files <- list.files(path)[which(grepl("TE_norm_cluster_size_matrix.csv", list.files(path)))]
+
+counts <- list()
+for(file in files){
+  count_matrix <- fread(paste(path, file, sep = ""), data.table=F)
+  rownames(count_matrix) <- count_matrix$te_id
+  l1 <- reshape2::melt(count_matrix[c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE"),])
+  l1$cluster <- sapply(str_split(l1$variable, ".cluster_"), `[[`, 2)
+  l1 <- merge(l1, coldata_celltypes, by="cluster")
+  sample_name <- sapply(str_split(file, "_TE_norm_cluster_size_matrix.csv"), `[[`, 1)
+  l1$sample <- sample_name
+  counts[[sample_name]] <- l1
+}
+
+l1_boxplot_per_cluster_per_sample <- do.call(rbind, counts)
+table(l1_boxplot_per_cluster_per_sample$cellType)
+l1_boxplot_per_cluster_per_sample$cellType <- factor(l1_boxplot_per_cluster_per_sample$cellType, levels=c("Apical progenitors", "Basal progenitors", "Cajal Retzius", "Early born neurons", "Interneurons", "Microglia"))
+l1_boxplot_per_cluster_per_sample$te_id <- factor(l1_boxplot_per_cluster_per_sample$te_id, levels=c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1MEb:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE", "L1ME3E:L1:LINE"))
+
+l1_boxplot_per_cluster_per_sample <- merge(l1_boxplot_per_cluster_per_sample, c("DA103" = "7 weeks 4 days",
+                                                       "DA094" = "8 weeks",
+                                                       "DA140" = "8 weeks 6 days",
+                                                       "Seq095_2" = "10 weeks 3 days\n(sample 1)",
+                                                       "Seq098_2" = "10 weeks 3 days\n(sample 2)"))
+colnames(l1_boxplot_per_cluster_per_sample)[ncol(l1_boxplot_per_cluster_per_sample)] <- "TimePoint"
+l1_boxplot_per_cluster_per_sample$TimePoint <- factor(l1_boxplot_per_cluster_per_sample$TimePoint, levels=c("10 weeks 3 days\n(sample 2)", "10 weeks 3 days\n(sample 1)",
+                                                                                              "8 weeks 6 days",
+                                                                                              "8 weeks",
+                                                                                              "7 weeks 4 days"))
+
+l1_boxplot_per_cluster_per_sample_barplot <- aggregate(l1_boxplot_per_cluster_per_sample$value, by=list(l1_boxplot_per_cluster_per_sample$te_id, l1_boxplot_per_cluster_per_sample$cellType, l1_boxplot_per_cluster_per_sample$TimePoint, l1_boxplot_per_cluster_per_sample$colour), FUN=mean)
+colnames(l1_boxplot_per_cluster_per_sample_barplot) <- c("te_id", "cellType", "TimePoint", "colour", "mean")
+l1_boxplot_per_cluster_per_sample_barplot$sd <- aggregate(l1_boxplot_per_cluster_per_sample$value, by=list(l1_boxplot_per_cluster_per_sample$te_id, l1_boxplot_per_cluster_per_sample$cellType, l1_boxplot_per_cluster_per_sample$TimePoint, l1_boxplot_per_cluster_per_sample$colour), FUN=sd)[,"x"]
+# l1_boxplot_per_cluster_per_sample_barplot$TimePoint <- factor(l1_boxplot_per_cluster_per_sample_barplot$TimePoint, levels = c("7 weeks 4 days", "8 weeks", "8 weeks 6 days", "10 weeks 3 days\n(sample 1)", "10 weeks 3 days\n(sample 2)", ""))
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/young_old_braindev_per_cluster_per_sample_celltypes.pdf", width=14)
+ggplot(l1_boxplot_per_cluster_per_sample_barplot, aes(x=TimePoint, y=mean, fill=cellType)) + geom_bar(stat = "identity", position = "dodge") + geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.2,
+                 position=position_dodge(.9)) +
+  facet_wrap(.~te_id, ncol=2, scales = "free_y")  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "Normalized expression") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+dev.off()
+
+l1_boxplot_per_cluster_per_sample$neurons <- ifelse(endsWith(as.character(l1_boxplot_per_cluster_per_sample$cellType), "neurons"), "Neurons", "Progenitors")
+l1_boxplot_per_cluster_per_sample_no_microglia <- l1_boxplot_per_cluster_per_sample[which(l1_boxplot_per_cluster_per_sample$cellType != "Microglia"),]
+
+# pdf("/Volumes/My Passport/FetalCortex/manuscript/November2022/plots/young_old_braindev_per_cluster_per_sample_neurons_progenitors.pdf", width=17)
+ggplot(l1_boxplot_per_cluster_per_sample_no_microglia, aes(x=TimePoint, y=log2(value+0.5), fill=neurons)) + geom_boxplot() +
+  facet_wrap(.~te_id)  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+# dev.off()
+```
+
+```{r}
+fetal_cellcycle <- readRDS("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCellCycle/fetalcortex_merged_cluster.rds")
+DefaultAssay(fetal_cellcycle) <- "TE_norm_cluster_size"
+
+ggarrange(FeaturePlot(fetal_cellcycle, features = c("L1HS:L1:LINE", "L1MEb:L1:LINE"), keep.scale = "all", ncol = 2),
+FeaturePlot(fetal_cellcycle, features = c("L1PA2:L1:LINE","L1ME3E:L1:LINE"), keep.scale = "all", ncol = 2),
+FeaturePlot(fetal_cellcycle, features = c("L1PA3:L1:LINE", "L1MA8:L1:LINE"), keep.scale = "all", ncol = 2),
+FeaturePlot(fetal_cellcycle, features = c("L1PA4:L1:LINE", "L1MEf:L1:LINE"), keep.scale = "all", ncol = 2), ncol=4)
+```
+### TEs and cell cycle
+
+
+```{r }
+# count_matrix_per_cluster_per_cellcycle <- fread("/Volumes/My Passport/FetalCortex/13.07.21/3_combinedUMAP_perCluster_perCellCycle/clusterPipeline/TE_counts_normalized/multiple/all_TE_norm_cluster_size_matrix.csv", data.table = F)
+count_matrix_per_cluster_per_cellcycle <- fread("/Volumes/MyPassport/FetalCortex/30.03.22/3_combinedUMAP_perCluster_perCellCycle/clusterPipeline/TE_counts_normalized/multiple/merged_cluster_TE_norm_cluster_size_matrix.csv", data.table = F)
+rownames(count_matrix_per_cluster_per_cellcycle) <- count_matrix_per_cluster_per_cellcycle$te_id
+l1_boxplot_per_cluster_per_cellcycle <- reshape2::melt(count_matrix_per_cluster_per_cellcycle[c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE"),])
+l1_boxplot_per_cluster_per_cellcycle$cluster_cellcycle <- sapply(str_split(l1_boxplot_per_cluster_per_cellcycle$variable, "fetalcortex_merged_cluster_"), `[[`, 2)
+l1_boxplot_per_cluster_per_cellcycle$cluster <- sapply(str_split(l1_boxplot_per_cluster_per_cellcycle$cluster_cellcycle, "_"), `[[`, 1)
+l1_boxplot_per_cluster_per_cellcycle$cellcycle <- sapply(str_split(l1_boxplot_per_cluster_per_cellcycle$cluster_cellcycle, "_"), `[[`, 2)
+l1_boxplot_per_cluster_per_cellcycle <- merge(l1_boxplot_per_cluster_per_cellcycle, coldata_celltypes, by="cluster")
+l1_boxplot_per_cluster_per_cellcycle$cellType <- factor(l1_boxplot_per_cluster_per_cellcycle$cellType, levels=c("Apical progenitors", "Basal progenitors", "Cajal Retzius", "Early born neurons", "Interneurons", "Microglia"))
+l1_boxplot_per_cluster_per_cellcycle$te_id <- factor(l1_boxplot_per_cluster_per_cellcycle$te_id, levels=c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1MEb:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE", "L1ME3E:L1:LINE"))
+# pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/young_old_L1s_braindev_per_cluster_per_cellcycle_celltype.pdf", width=10)
+ggplot(l1_boxplot_per_cluster_per_cellcycle, aes(x=cellType, y=log2(value+0.5), fill=cellcycle)) + geom_boxplot() +
+  facet_wrap(.~te_id, scales = "free")  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + stat_compare_means(label = "p.signif")
+# dev.off()
+
+l1_boxplot_per_cluster_per_cellcycle_barplot <- aggregate(l1_boxplot_per_cluster_per_cellcycle$value, by=list(l1_boxplot_per_cluster_per_cellcycle$te_id, l1_boxplot_per_cluster_per_cellcycle$cellType, l1_boxplot_per_cluster_per_cellcycle$cellcycle, l1_boxplot_per_cluster_per_cellcycle$colour), FUN=mean)
+colnames(l1_boxplot_per_cluster_per_cellcycle_barplot) <- c("te_id", "cellType", "cellcycle", "colour", "mean")
+l1_boxplot_per_cluster_per_cellcycle_barplot$sd <- aggregate(l1_boxplot_per_cluster_per_cellcycle$value, by=list(l1_boxplot_per_cluster_per_cellcycle$te_id, l1_boxplot_per_cluster_per_cellcycle$cellType, l1_boxplot_per_cluster_per_cellcycle$cellcycle, l1_boxplot_per_cluster_per_cellcycle$colour), FUN=sd)[,"x"]
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/young_old_L1s_braindev_per_cluster_per_cellcycle_celltype.pdf", width=14)
+ggplot(l1_boxplot_per_cluster_per_cellcycle_barplot, aes(x=cellType, y=mean, fill=cellcycle)) + geom_bar(stat = "identity", position = "dodge") + geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.2,
+                 position=position_dodge(.9)) + stat_compare_means(label = "p.signif") +
+  facet_wrap(.~te_id, ncol=2, scales = "free_y")  +
+  theme_classic() +
+ theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Cell type", y= "Normalized expression") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+dev.off()
+```
+
+## Percentage of counts in genes vs TEs
+# ```{r}
+# all_TE_norm_cluster_size_matrix_w_genes <- fread("/Volumes/My Passport/FetalCortex/13.07.21/3_combinedUMAP_perCluster/clusterPipeline/TE_counts_normalized/multiple/all_TE_norm_cluster_size_matrix_w_genes.csv", data.table = F)
+# gene_te_reads <- data.frame(Gene = colSums(all_TE_norm_cluster_size_matrix_w_genes[which(startsWith(all_TE_norm_cluster_size_matrix_w_genes$te_id, "ENS")), colnames(all_TE_norm_cluster_size_matrix_w_genes)[-1]]),
+#                             TE = colSums(all_TE_norm_cluster_size_matrix_w_genes[which(!startsWith(all_TE_norm_cluster_size_matrix_w_genes$te_id, "ENS")), colnames(all_TE_norm_cluster_size_matrix_w_genes)[-1]]))
+# gene_te_reads$sample <- rownames(gene_te_reads)
+# gene_te_reads <- reshape2::melt(gene_te_reads)
+# 
+# # pdf("/Volumes/My Passport/FetalCortex/manuscript/January2022/plots/num_reads_genes_TEs_fetal_singlecell.pdf")
+# ggplot(gene_te_reads, aes(x=sample, y=value, fill=variable)) + geom_bar(stat="identity") + theme_classic() + labs(x="Sample", y="Number of reads quantified", fill = "Type") + theme(axis.text.x = element_text(angle=90, hjust=1)) 
+# # dev.off()
+# ```

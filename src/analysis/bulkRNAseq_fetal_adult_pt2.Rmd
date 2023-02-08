@@ -1,0 +1,224 @@
+---
+title: "Fetal cortex bulk RNAseq"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Gene differential expression analysis 
+
+### PCA plot
+```{r genePCA, message=FALSE}
+library(pheatmap)
+library(DESeq2)
+library(stringr)
+library(ggplot2)
+library(data.table)
+library(ggrepel)
+
+# Reading gene quantification ----
+path <- "/Volumes/MyPassport/l1_manuscript/gene_counts/default/"
+files <- list.files(path, pattern = "csv")
+files <- files[which(!endsWith(files, "summary"))]
+files <- files[which(startsWith(files, "HuEm") | startsWith(files, "TBI"))]
+samples <- sapply(str_split(files, ".gene_count_matrix_2.csv"), `[[`, 1)
+conditions <- ifelse(grepl("HuEmCtx", samples), "Developing", "TBI")
+
+coldata <- data.frame(sample= samples,
+           condition=conditions,
+           file=files)
+
+for(i in 1:length(samples)){
+  file <- paste(path, files[i], sep="")
+  sample <- samples[i]
+  
+  tmp <- fread(file, data.table=F)
+  tmp <- tmp[,c(1, ncol(tmp))]
+  colnames(tmp)[2] <- sample
+  
+  if(i == 1){
+    counts <- tmp
+  }else{
+    counts <- merge(counts, tmp, by="Geneid", all=T)
+  }
+}
+
+rownames(coldata) <- coldata$sample
+coldata_dev_tbi <- coldata[which(coldata$condition %in% c("Developing", "TBI")),]
+rownames(counts) <- counts$Geneid
+
+# Gene DEA ----
+gene_dds <- DESeqDataSetFromMatrix(counts[,rownames(coldata_dev_tbi)], coldata_dev_tbi, design = ~ condition)
+gene_dds$condition <- relevel(gene_dds$condition, "TBI")
+gene_dds <- DESeq(gene_dds)
+gene_vst <- varianceStabilizingTransformation(gene_dds)
+
+# Plot PCA
+plotPCA(gene_vst) + theme_classic() + ylim(c(-50,50)) + labs(colour="Condition") + 
+  ggtitle("PCA - Top 500 most variable genes") +  scale_colour_discrete(name = "Condition", labels = c("Adult", "Developing"))
+
+# Normalized gene expression
+gene_counts_norm <- counts(gene_dds, normalize=T)
+
+# DEA results
+gene_res <- DESeq2::lfcShrink(gene_dds, coef="condition_Developing_vs_TBI")
+```
+
+### Add timepoint to coldata
+
+```{r gene_dev_housekeep, message=FALSE}
+timepoint <- as.data.frame(c("TBI_HuBrainCTL_Nuclei_501F_bulk_S4" = "87 years old (F)",
+"TBI_HuBrainCTL_Nuclei_501T_bulk_S5" = "87 years old (T)",
+"TBI_HuBrainCTL_Nuclei_502F_bulk_S6" = "75 years old (F)",
+"TBI_HuBrainCTL_Nuclei_502T_bulk_S7" = "75 years old (T)",
+"TBI_HuBrainCTL_Nuclei_529F_bulk_S8" = "69 years old (F)",
+"TBI_HuBrainCTL_Nuclei_529T_bulk_S9" = "69 years old (T)",
+"HuEmCtx_40mm_190611_bulkA_S2" = "10.5 weeks (Seq095_2) (copy 1)",
+"HuEmCtx_40mm_190611_bulkB_S3" = "10.5 weeks (Seq095_2) (copy 2)",
+"HuEmCtxfresh40mm10-5w_201029_bulk_S23" = "10.5 weeks (Seq098_2)",
+"HuEmCtxfresh7w4d_190416_bulk_DA103_S1" = "7 weeks 4 days",
+"HuEmCtxfresh8w_190319_bulk_DA094_S21" = "8 weeks",
+"HuEmCtxfresh8w6d_190416_bulk_DA140_S22" = "8 weeks 6 days"))
+colnames(timepoint) <- "timepoint"
+coldata_dev_tbi <- merge(coldata_dev_tbi, timepoint, by.x="sample", by.y="row.names")
+rownames(coldata_dev_tbi) <- coldata_dev_tbi$sample
+
+```
+
+## Unique mapping. Strand specific expression per subfamily
+### Read data
+
+```{r TE_unique_per_strand, message=FALSE}
+TEclass <- fread('/Volumes/MyPassport/annotations/human/repeatmasker/hg38_rmsk_TEtranscripts_classification.tab', data.table = F, header = F)
+colnames(TEclass) <- c("TE_id", "TE_subfamily", "TE_family", "TE_class")
+
+path <- "/Volumes/MyPassport/l1_manuscript/TEcounts/unique/"
+files <- list.files(path, pattern = "csv")
+files <- files[which(!grepl("summary", files))]
+files <- files[which(!grepl("ORF0", files))]
+files <- files[which(startsWith(files, "HuEm") | startsWith(files, "TBI"))]
+samples <- unique(sapply(str_split(files, ".TE_count_matrix_per_strand.csv"), `[[`, 1))
+
+for(i in 1:length(samples)){
+  file <- paste(path, files[i], sep="")
+  sample <- samples[i]
+  
+  tmp <- fread(file, data.table=F)
+  tmp <- tmp[,c("Geneid", "Strand", "Length", colnames(tmp)[c(ncol(tmp), ncol(tmp)-1)])]
+  # tmp <- tmp[,c("Geneid", "Strand", "Length", colnames(tmp)[ncol(tmp)])]
+  colnames(tmp)[c(ncol(tmp), ncol(tmp)-1)] <- paste(sample, sapply(str_split(sapply(str_split(colnames(tmp)[c(ncol(tmp), ncol(tmp)-1)], "sortedByCoord."), `[[`, 2), ".out.bam"), `[[`, 1), sep="_")
+  # colnames(tmp)[ncol(tmp)] <- sapply(str_split(colnames(tmp)[ncol(tmp)], "/"), `[[`, 8)
+    
+  if(i == 1){
+    TEcounts <- tmp
+  }else{
+    if(all(tmp$Geneid == TEcounts$Geneid)){
+      TEcounts <- cbind(TEcounts, tmp[,c(ncol(tmp), (ncol(tmp)-1)),drop=F])  
+    }else{
+      TEcounts <- merge(TEcounts, tmp, by=c("Geneid", "Strand", "Length"), all=T)  
+    }
+  }
+  print(sample)
+}
+rownames(TEcounts) <- TEcounts$Geneid
+
+# Divide matrix by transcription direction
+TEcounts_forward <- TEcounts[, c("Strand", colnames(TEcounts)[which(grepl("forward", colnames(TEcounts)))])]
+TEcounts_reverse <- TEcounts[, c("Strand", colnames(TEcounts)[which(grepl("reverse", colnames(TEcounts)))])]
+colnames(TEcounts_forward) <- sapply(str_split(colnames(TEcounts_forward), "_forward"), `[[`, 1)
+colnames(TEcounts_reverse) <- sapply(str_split(colnames(TEcounts_reverse), "_reverse"), `[[`, 1)
+
+TEcounts_forward_norm <- TEcounts_forward[coldata$sample]
+TEcounts_reverse_norm <- TEcounts_reverse[coldata$sample]
+
+# Normalize by gene expression
+TEcounts_forward_norm[] <- mapply(TEcounts_forward_norm, gene_dds$sizeFactor[coldata$sample], FUN="/")
+TEcounts_reverse_norm[] <- mapply(TEcounts_reverse_norm, gene_dds$sizeFactor[coldata$sample], FUN="/")
+
+colnames(TEcounts_forward_norm) <- paste(colnames(TEcounts_forward_norm), "forward", sep="_")
+colnames(TEcounts_reverse_norm) <- paste(colnames(TEcounts_reverse_norm), "reverse", sep="_")
+
+# Annotate TEs
+TEcounts_forward_norm <- merge(TEclass, TEcounts_forward_norm, by.x='TE_id', by.y="row.names")
+TEcounts_reverse_norm <- merge(TEclass, TEcounts_reverse_norm, by.x='TE_id', by.y="row.names")
+# Remove ? endings
+TEcounts_forward_norm$TE_class <- as.character(TEcounts_forward_norm$TE_class)
+TEcounts_reverse_norm$TE_class <- as.character(TEcounts_reverse_norm$TE_class)
+TEcounts_forward_norm$TE_class <- gsub("\\?", "", TEcounts_forward_norm$TE_class)
+TEcounts_reverse_norm$TE_class <- gsub("\\?", "", TEcounts_reverse_norm$TE_class)
+
+# Subset to retrotransposons to not work with huge dataframes...
+TEcounts_forward_norm <- TEcounts_forward_norm[which(gsub("?", "", TEcounts_forward_norm$TE_class) %in% c("LINE", "SINE", "LTR", "Retroposon")),]
+TEcounts_reverse_norm <- TEcounts_reverse_norm[which(gsub("?", "", TEcounts_reverse_norm$TE_class) %in% c("LINE", "SINE", "LTR", "Retroposon")),]
+
+TEcounts_norm <- merge(TEcounts_forward_norm, TEcounts_reverse_norm, by=c("TE_id", "TE_subfamily", "TE_family", "TE_class"), all=T)
+# Subset matrices for L1s
+TEcounts <- merge(TEcounts, TEclass, by.x="Geneid", by.y="TE_id")
+TEcounts$TE_class <- gsub("\\?", "", TEcounts$TE_class)
+
+L1counts_norm <- TEcounts_norm[which(TEcounts_norm$TE_family == 'L1'),]
+L1counts <- TEcounts[which(TEcounts$TE_family == "L1"),]
+
+```
+
+## Plot expression per strand by L1 subfamily
+
+```{r}
+library(ggpubr)
+# Sum of expression by strand and subfamily
+TEcounts_norm <- merge(TEcounts_norm, TEcounts[,c("Geneid", "Strand")], by.x="TE_id", by.y="Geneid")
+TEcounts_norm_aggr <- aggregate(TEcounts_norm[,c(paste(coldata$sample, "forward", sep="_"), paste(coldata$sample, "reverse", sep="_"))], by=list(TEcounts_norm$TE_subfamily, TEcounts_norm$Strand), FUN=sum)
+TEcounts_norm_aggr_melt <- reshape2::melt(TEcounts_norm_aggr, by=c('Group.1', 'Group.2'))
+
+TEcounts_norm_aggr_melt$strands <- ifelse(grepl("forward", TEcounts_norm_aggr_melt$variable), "forward", "reverse")
+TEcounts_norm_aggr_melt$strands <- factor(TEcounts_norm_aggr_melt$strands, levels=c('forward', 'reverse'))
+colnames(TEcounts_norm_aggr_melt) <- c('TE_subfamily', 'TE_strand', 'sample_names','value', 'read_strand')
+
+
+plot_strand_boxplot <- function(df, family_subfamily = "TE_subfamily", name, ttest=FALSE, font.size=10){
+    
+  TEcounts_norm_aggr_melt_element <- df[which(startsWith(df[,family_subfamily], name) & df$sample_names %in% c(paste(coldata$sample, "forward", sep="_"), paste(coldata$sample, "reverse", sep="_"))),]
+  TEcounts_norm_aggr_melt_element$signal <- ifelse(TEcounts_norm_aggr_melt_element$TE_strand == '-' & TEcounts_norm_aggr_melt_element$read_strand == 'reverse', "Sense",
+                                                 ifelse(TEcounts_norm_aggr_melt_element$TE_strand == '+' & TEcounts_norm_aggr_melt_element$read_strand == 'forward', "Sense", "Antisense"))
+  TEcounts_norm_aggr_melt_element$signal <- factor(TEcounts_norm_aggr_melt_element$signal, levels=c("Sense", "Antisense"))
+  TEcounts_norm_aggr_melt_element$sample <- gsub("_reverse", "", TEcounts_norm_aggr_melt_element[which(grepl("reverse", TEcounts_norm_aggr_melt_element$sample_names)), "sample_names"])
+  TEcounts_norm_aggr_melt_element$sample <- gsub("_forward", "", TEcounts_norm_aggr_melt_element[which(grepl("forward", TEcounts_norm_aggr_melt_element$sample_names)), "sample_names"])
+  TEcounts_norm_aggr_melt_element <- merge(TEcounts_norm_aggr_melt_element, coldata_dev_tbi, by='sample')
+  TEcounts_norm_aggr_melt_element$condition <- ifelse(TEcounts_norm_aggr_melt_element$condition == "TBI", "Adult", "Developing")
+  
+  print(compare_means(value ~ signal, data = TEcounts_norm_aggr_melt_element[which(TEcounts_norm_aggr_melt_element$condition == "Adult"),], method = "wilcox.test", paired = T))
+  print(compare_means(value ~ signal, data = TEcounts_norm_aggr_melt_element[which(TEcounts_norm_aggr_melt_element$condition == "Developing"),], method = "wilcox.test", paired = T))
+  
+  p <- ggplot(TEcounts_norm_aggr_melt_element, aes(x=signal, y=value, fill=signal, colour=signal)) +
+    geom_boxplot() + theme_classic() + guides(color = "none") + stat_compare_means(label = "p.format", size = 4, label.y.npc = 0.80, label.x.npc = 0.5, method = "wilcox.test", paired = T) + facet_wrap(.~condition, scales = "free", ncol = 1)
+  p <- p + ggtitle(name) + labs(x="", y="Total number of reads in a sample", fill = "") +
+    scale_fill_manual(values = c("Sense" = "#74a49d", "Antisense" = "#34413f"),
+                      labels = c("Sense\n(-TE & -read or\n+TE & +read)\n", "Antisense\n(-TE & +read or\n+TE & -read)\n")) +
+    scale_colour_manual(values = c("Sense" = "black", "Antisense" = "black"))  
+
+  return(p)
+}
+
+FL_L1counts_norm <- L1counts_norm[which(L1counts$Length >= 6000), ]
+FL_L1counts_norm_aggr <- aggregate(FL_L1counts_norm[,c(paste(coldata$sample, "forward", sep="_"), paste(coldata$sample, "reverse", sep="_"))], by=list(FL_L1counts_norm$TE_subfamily, FL_L1counts_norm$Strand), FUN=sum)
+FL_L1counts_norm_aggr_melt <- reshape2::melt(FL_L1counts_norm_aggr, by=c('Group.1', 'Group.2'))
+
+FL_L1counts_norm_aggr_melt$strands <- ifelse(grepl("forward", FL_L1counts_norm_aggr_melt$variable), "forward", "reverse")
+FL_L1counts_norm_aggr_melt$strands <- factor(FL_L1counts_norm_aggr_melt$strands, levels=c('forward', 'reverse'))
+colnames(FL_L1counts_norm_aggr_melt) <- c('TE_subfamily', 'TE_strand', 'sample_names','value', 'read_strand')
+
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/November2022/plots/boxplots_sense_antisense_young_old_L1s.pdf", width = 6, height = 15)
+ggarrange(plot_strand_boxplot(FL_L1counts_norm_aggr_melt, name="L1HS") + ggtitle("Full length L1HS") + ylim(c(0,700)),
+          plot_strand_boxplot(FL_L1counts_norm_aggr_melt, name="L1PA2")+ ggtitle("Full length L1PA2") + ylim(c(0,2700)), 
+          plot_strand_boxplot(FL_L1counts_norm_aggr_melt, name="L1PA3")+ ggtitle("Full length L1PA3") + ylim(c(0,1200)), 
+          plot_strand_boxplot(FL_L1counts_norm_aggr_melt, name="L1PA4")+ ggtitle("Full length L1PA4") + ylim(c(0,2000)),
+          plot_strand_boxplot(TEcounts_norm_aggr_melt, name="L1MEb") + ylim(c(0,300)),
+          plot_strand_boxplot(TEcounts_norm_aggr_melt, name="L1ME3E") + ylim(c(0,2000)),
+          plot_strand_boxplot(TEcounts_norm_aggr_melt, name="L1MA8") + ylim(c(0,2700)),
+          plot_strand_boxplot(TEcounts_norm_aggr_melt, name="L1MEf") + ylim(c(0,5600)), 
+          ncol=2, nrow=4, common.legend = T, legend = "right")
+dev.off()
+
+```
+
+
