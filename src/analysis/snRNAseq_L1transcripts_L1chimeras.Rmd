@@ -49,12 +49,12 @@ for(cell in celltypes) dea_celltypes_fetal[[cell]]$gene <- rownames(dea_celltype
 for(cell in celltypes) dea_celltypes_fetal[[cell]] <- dea_celltypes_fetal[[cell]][,c("gene", "p_val",	"avg_log2FC",	"pct.1",	"pct.2",	"p_val_adj")] 
 for(cell in celltypes) dea_celltypes_fetal[[cell]]$celltype <- cell
 
-# write.xlsx(x = list("Apical progenitors" = dea_celltypes_fetal$`Apical progenitors`,
-#                     "Basal progenitors" = dea_celltypes_fetal$`Basal progenitors`,
-#                     "Cajal Retzius" = dea_celltypes_fetal$`Cajal Retzius`,
-#                     "Early born neurons" = dea_celltypes_fetal$`Early born neurons`,
-#                     "Interneurons" = dea_celltypes_fetal$Interneurons,
-#                     "Microglia" = dea_celltypes_fetal$Microglia), file = "/Volumes/MyPassport/FetalCortex/manuscript/June2023/dea_fetal_celltypes.xlsx") # This refers to supplemental table 2
+write.xlsx(x = list("Apical progenitors" = dea_celltypes_fetal$`Apical progenitors`,
+                    "Basal progenitors" = dea_celltypes_fetal$`Basal progenitors`,
+                    "Cajal Retzius" = dea_celltypes_fetal$`Cajal Retzius`,
+                    "Early born neurons" = dea_celltypes_fetal$`Early born neurons`,
+                    "Interneurons" = dea_celltypes_fetal$Interneurons,
+                    "Microglia" = dea_celltypes_fetal$Microglia), file = "/Volumes/MyPassport/FetalCortex/manuscript/June2023/Supplemental_Table_2_gene_DEA_fetal_celltypes") # This refers to supplemental table 2
 
 # Supplemental table 4
 L1transcripts_fetal <- read.xlsx("/Volumes/MyPassport/FetalCortex/manuscript/June2023/Supplemental_Table_4_alt_prom_L1_transcripts.xlsx", sheet = "fetal")
@@ -98,12 +98,12 @@ dea_celltypes_adult_df <- do.call("rbind", dea_celltypes_adult)
 dea_celltypes_adult_df <- dea_celltypes_adult_df[which(dea_celltypes_adult_df$p_val_adj < 0.05 & dea_celltypes_adult_df$avg_log2FC > 0),]
 
 for(cell in celltypes) dea_celltypes_adult[[cell]] <- dea_celltypes_adult[[cell]][,c("gene", "p_val",	"avg_log2FC",	"pct.1",	"pct.2",	"p_val_adj")]
-# write.xlsx(x = list("Astrocytes" = dea_celltypes_adult$Astrocytes,
-#                     "Excitatory neurons" = dea_celltypes_adult$`Excitatory neurons`,
-#                     "Inhibitory neurons" = dea_celltypes_adult$`Inhibitory neurons`,
-#                     "Microglia" = dea_celltypes_adult$`Microglia`,
-#                     "Oligodendrocytes" = dea_celltypes_adult$Oligodendrocytes,
-#                     "OPC" = dea_celltypes_adult$OPC), file = "/Volumes/MyPassport/FetalCortex/manuscript/June2023/dea_adult_celltypes.xlsx") # Supplemental table 1
+write.xlsx(x = list("Astrocytes" = dea_celltypes_adult$Astrocytes,
+                    "Excitatory neurons" = dea_celltypes_adult$`Excitatory neurons`,
+                    "Inhibitory neurons" = dea_celltypes_adult$`Inhibitory neurons`,
+                    "Microglia" = dea_celltypes_adult$`Microglia`,
+                    "Oligodendrocytes" = dea_celltypes_adult$Oligodendrocytes,
+                    "OPC" = dea_celltypes_adult$OPC), file = "/Volumes/MyPassport/FetalCortex/manuscript/June2023/Supplemental_Table_1_gene_DEA_adult_celltypes.xlsx") # Supplemental table 1
 
 # Supplemental table 4
 L1transcripts_adult <- read.xlsx("/Volumes/MyPassport/FetalCortex/manuscript/June2023/Supplemental_Table_4_alt_prom_L1_transcripts.xlsx", sheet = "adult")
@@ -118,13 +118,13 @@ dea_celltypes_adult_df_L1transcripts <- split(dea_celltypes_adult_df[which(dea_c
 upset(fromList(sapply(dea_celltypes_adult_df_L1chimeras, `[[`, "gene")))
 upset(fromList(sapply(dea_celltypes_adult_df_L1transcripts, `[[`, "gene")))
 upset(fromList(sapply(dea_celltypes_fetal_df_L1chimeras, `[[`, "gene")))
-upset(fromList(sapply(dea_celltypes_fetal_df_L1transcripts, `[[`, "gene")))
+# upset(fromList(sapply(dea_celltypes_fetal_df_L1transcripts, `[[`, "gene")))
 
-# write.xlsx(list("Adult celltype DEG L1transcript" = do.call("rbind", dea_celltypes_adult_df_L1transcripts),
-# "Adult celltype DEG L1chimera" = do.call("rbind", dea_celltypes_adult_df_L1chimeras),
-# "Fetal celltype DEG L1transcript" = do.call("rbind", dea_celltypes_fetal_df_L1transcripts),
-# "Fetal celltype DEG L1chimera" = do.call("rbind", dea_celltypes_fetal_df_L1chimeras)),
-# "/Volumes/MyPassport/FetalCortex/manuscript/June2023/Supplemental_Table_5_celltype_DE_genes_L1transcripts_L1chimeras.xlsx")
+write.xlsx(list("Adult celltype DEG L1transcript" = do.call("rbind", dea_celltypes_adult_df_L1transcripts),
+"Adult celltype DEG L1chimera" = do.call("rbind", dea_celltypes_adult_df_L1chimeras),
+"Fetal celltype DEG L1transcript" = do.call("rbind", dea_celltypes_fetal_df_L1transcripts),
+"Fetal celltype DEG L1chimera" = do.call("rbind", dea_celltypes_fetal_df_L1chimeras)),
+"/Volumes/MyPassport/FetalCortex/manuscript/June2023/Supplemental_Table_5_celltype_DE_genes_L1transcripts_L1chimeras.xlsx")
 ```
 
 
