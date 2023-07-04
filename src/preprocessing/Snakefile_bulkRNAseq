@@ -11,28 +11,32 @@ configfile: "/projects/fs3/raquelgg/l1_manuscript/src/config_files/config_bulkRN
 SAMPLES = config["samples"]
 fetal = config["fetal"]
 adult = config["adult"]
+fetal_adult = config["fetal_adult"]
 fbNPCs = config["fbNPCs"]
 linc01876_crispri = config["linc01876_crispri"]
 
 geneGTF = "/projects/fs3/raquelgg/annotations/hg38/gencode/v36/gencode.v36.annotation.gtf"
 starIndex = "/projects/fs1/common/genome/lunarc/indicies/star/human/hg38/"
+#starIndex = "/projects/fs5/jakobssonlab/GRCh38.p13_gencode.v38_STAR"
 teGTF = "/projects/fs3/raquelgg/annotations/hg38/repeatmasker/hg38_rmsk_TEtranscripts.gtf"
 orf0_GTF = "/projects/fs3/raquelgg/CTG_JGJSeq120_122/resources/hg38_rmsk_FL_L1HS_L1PA4_ORF0.gtf"
 
 # Run as:
-# snakemake -j 5 --cluster-config /path/to/server/config/file.json --cluster "sbatch -A {cluster.account} -p {cluster.partition} --tasks-per-node {cluster.tasks-per-node}  -t {cluster.time} -o {cluster.output} -e {cluster.error} -J {cluster.job-name} -N {cluster.nodes}" --latency-wait 60 -s Snakefile_bulkRNAseq
+# snakemake -j 5 --cluster-config /projects/fs3/raquelgg/l1_manuscript/src/config_files/lunarc_config.json --cluster "sbatch -A {cluster.account} -p {cluster.partition} --tasks-per-node {cluster.tasks-per-node}  -t {cluster.time} -o {cluster.output} -e {cluster.error} -J {cluster.job-name} -N {cluster.nodes}" --latency-wait 60 -s Snakefile_bulkRNAseq
 rule all:
     input:
-        expand(os.path.join(WD, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.RPKM.reverse.out.bw"), sample = SAMPLES), # per strand bigwig files (deeptools) in all data sets
-        expand(os.path.join(WD, "gene_counts/default/{sample}.gene_count_matrix_2.csv"), sample = SAMPLES), # gene quantification in all data sets
-        expand(os.path.join(WD, "TEcounts/unique/{sample}.TE_count_matrix_per_strand.csv"), sample = fetal), # per strand TE quantification in adult and fetal samples
-        expand(os.path.join(WD, "TEcounts/unique/{sample}.TE_count_matrix_per_strand.csv"), sample = adult),
-        expand(os.path.join(WD, "TEcounts/unique/{sample}.TE_count_matrix_2.csv"), sample = linc01876_crispri), 
-        expand(os.path.join(WD, "TEcounts/multiple/{sample}.cntTable"), sample = fetal), # TE transcripts in adult and fetal samples
-        expand(os.path.join(WD, "TEcounts/multiple/{sample}.cntTable"), sample = adult),
-        os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_positive_strand.mtx"), # FL L1HS-L1PA4 in fetal and adult samples
-        os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_reverse_strand.mtx"),
-        expand(os.path.join(WD, "TEcounts/unique/{sample}.FL_L1HS_L1PA4_ORF0_count_matrix_2.csv"), sample = SAMPLES)
+        expand(os.path.join(WD, "transcript_assembly/0_gencode/{sample}.gtf"), sample = fetal_adult),
+        os.path.join(WD, "transcript_assembly/1_mergedsamples/transcript_count_matrix.csv"),
+        #expand(os.path.join(WD, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.RPKM.reverse.out.bw"), sample = SAMPLES), # per strand bigwig files (deeptools) in all data sets
+        #expand(os.path.join(WD, "gene_counts/default/{sample}.gene_count_matrix_2.csv"), sample = SAMPLES), # gene quantification in all data sets
+        #expand(os.path.join(WD, "TEcounts/unique/{sample}.TE_count_matrix_per_strand.csv"), sample = fetal), # per strand TE quantification in adult and fetal samples
+        #expand(os.path.join(WD, "TEcounts/unique/{sample}.TE_count_matrix_per_strand.csv"), sample = adult),
+        #expand(os.path.join(WD, "TEcounts/unique/{sample}.TE_count_matrix_2.csv"), sample = linc01876_crispri), 
+        #expand(os.path.join(WD, "TEcounts/multiple/{sample}.cntTable"), sample = fetal), # TE transcripts in adult and fetal samples
+        #expand(os.path.join(WD, "TEcounts/multiple/{sample}.cntTable"), sample = adult),
+        #os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_positive_strand.mtx"), # FL L1HS-L1PA4 in fetal and adult samples
+        #os.path.join(WD, "deeptools/FL_L1PAs/FL_L1PAs_reverse_strand.mtx"),
+        #expand(os.path.join(WD, "TEcounts/unique/{sample}.FL_L1HS_L1PA4_ORF0_count_matrix_2.csv"), sample = SAMPLES)
 
 
 rule uniquemapping:
@@ -130,7 +134,6 @@ rule indexing:
 
         module purge
         """
-        
 rule bigwig:
     input:
         os.path.join(WD, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.out.bam"),
@@ -311,4 +314,106 @@ rule matrix_FL_L1PAs:
         computeMatrix scale-regions -R $positive_l1hs $positive_l1pa2 $positive_l1pa3 $positive_l1pa4 -S {input.forward_strand_fetal} {input.forward_strand_adult} {input.reverse_strand_fetal} {input.reverse_strand_adult} --regionBodyLength 6000 -b 6000 -a 6000 -o {output.positive} 
         computeMatrix scale-regions -R $negative_l1hs $negative_l1pa2 $negative_l1pa3 $negative_l1pa4 -S {input.reverse_strand_fetal} {input.reverse_strand_adult} {input.forward_strand_fetal} {input.forward_strand_adult} --regionBodyLength 6000 -b 6000 -a 6000 -o {output.reverse}
 
+        """
+
+
+rule hg38_guided_assembly:
+    input:
+        bam = os.path.join(WD, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.out.bam"),
+        gene_gtf = geneGTF
+    output:
+        sample_gtf = os.path.join(WD, "transcript_assembly/0_gencode/{sample}.gtf")
+    shell:
+        """
+        echo Transcript assembly with Hg38 as guide
+
+        ml GCC/6.4.0-2.28  OpenMPI/2.1.1
+        ml StringTie/1.3.3b
+
+        # -v   Turns on verbose mode
+        # --rf Assumes a stranded library fr-firststrand
+        # -p   Specify the number of processing threads
+        # -o   Sets the name of the output GTF file
+        # -G   Use the reference annotation file (in GTF or GFF3 format) to guide the assembly process
+        # -l   Prefix for the name of the output transcripts
+
+        stringtie -v --rf -p 5 -o {output.sample_gtf} -G {input.gene_gtf} -l {wildcards.sample} {input.bam}
+
+        module purge
+        """
+
+rule hg38_guided_merging:
+    input:
+        gene_gtf = geneGTF,
+        samples_gtfs = expand(os.path.join(WD, "transcript_assembly/0_gencode/{sample}.gtf"), sample=fetal_adult)
+    output:
+        merged_gtf = os.path.join(WD, "transcript_assembly/merged_samples_0_gencode.gtf"),
+        gtf_list = "gtf_list.txt"
+    run:
+        with open("gtf_list.txt", "w") as fout:
+            fout.writelines([os.path.join(WD, 'transcript_assembly/0_gencode/') + s + '.gtf\n' for s in fetal_adult])
+        shell(
+            """
+            echo Merging transcripts assemblies into one
+
+            ml GCC/6.4.0-2.28  OpenMPI/2.1.1
+            ml StringTie/1.3.3b
+
+            # -t       Disables trimming at the ends of the assembled transcripts
+            # --merge  Transcript merge mode
+            # -p       Specify the number of processing threads
+            # -o  Sets the name of the output GTF file
+            # -G  Use the reference annotation file (in GTF or GFF3 format) to guide the assembly process
+
+            stringtie -t --merge -p 5 -o {output.merged_gtf} -G {input.gene_gtf}  {output.gtf_list}
+
+            module purge
+            """)
+
+
+rule mergedsamples_guided_readcount:
+    input:
+        os.path.join(WD, "transcript_assembly/merged_samples_0_gencode.gtf"),
+        os.path.join(WD, "map/unique/{sample}/{sample}_Aligned.sortedByCoord.out.bam")
+    output:
+        os.path.join(WD, "transcript_assembly/1_mergedsamples/{sample}.gtf"),
+        os.path.join(WD, "transcript_assembly/1_mergedsamples/{sample}.transcripts.gtf")
+    shell:
+        """
+        echo Using previous merged file to guide this new transcript assembly. Now all your samples will have same transcript ids.
+
+        ml GCC/6.4.0-2.28  OpenMPI/2.1.1
+        ml StringTie/1.3.3b
+
+        # -v    Turns on verbose mode
+        # -e    Limits the processing of read alignments to only estimate and output the assembled transcripts matching the reference transcripts given with the -G option
+        # -B    This switch enables the output of Ballgown input table files (*.ctab) containing coverage data for the reference transcripts given with the -G option.
+        # --rf  Assumes a stranded library fr-firststrand
+        # -p   Specify the number of processing threads
+        # -o   Sets the name of the output GTF file
+        # -G   Use the reference annotation file (in GTF or GFF3 format) to guide the assembly process
+        # -l   Prefix for the name of the output transcripts
+
+        stringtie -v -e -B --rf -p 5 -o {output[0]} -G {input[0]} -l {wildcards.sample} {input[1]}
+
+        module purge
+
+        echo Creating a gtf for transcripts only
+
+        cat {output[0]} | grep -w transcript > {output[1]}
+        """
+
+rule readcounts_matrices:
+    input:
+        "/projects/fs3/raquelgg/l1_manuscript/src/config_files/config_bulkRNAseq.yaml",
+        expand(os.path.join(WD, "transcript_assembly/1_mergedsamples/{sample}.gtf"), sample=fetal_adult)
+    output:
+        "prepDE_input.txt",
+        os.path.join(WD, "transcript_assembly/1_mergedsamples/transcript_count_matrix.csv")
+    shell:
+        """
+        awk '{{print $2, "/projects/fs3/raquelgg/l1_manuscript/transcript_assembly/1_mergedsamples/"$2".gtf"}}' OFS="\t" {input[0]} | tail -n +2  > {output[0]}
+        # -i  Input file
+        # -t  Transcript count output file name
+        /projects/fs3/raquelgg/cool_scripts/prepDE.py -i {output[0]} -t {output[1]};
         """
