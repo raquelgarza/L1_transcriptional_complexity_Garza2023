@@ -215,7 +215,7 @@ This is useful when using `DimPlot`, `FeaturePlot`, and plotting functions that 
 Here we read these matrix files and plot the mean expression of L1HS, L1PA2, L1PA3, L1PA4 and L1PA5 in each sample (as we are using the `TE_norm_cluster_size_matrix.csv` matrices).
 
 ```{r TE_celltype}
-path <- "/Volumes/My Passport/TBI/13.07.21/3_mergeSamples/clusterPipeline_grouped/TE_counts_normalized/multiple/"
+path <- "/Volumes/MyPassport/TBI/13.07.21/3_mergeSamples/clusterPipeline_grouped/TE_counts_normalized/multiple/"
 files <- list.files(path)[which(grepl("TE_norm_cluster_size_matrix.csv", list.files(path)))]
 
 counts <- list()
@@ -287,8 +287,7 @@ ggplot(seq109_l1_tmp, aes(x=neurons, y=log2(value+0.5), fill=neurons)) + geom_bo
   labs(fill = "Cell type", y= "log2(mean (Normalized cluster\nexpression) + 0.5)") + stat_compare_means(size=7, label = "p.signif", label.y.npc = 0.9, label.x.npc = 0.5)
 # dev.off()
 
-
-path <- "/Volumes/My Passport/TBI/13.07.21/3_mergeSamples/clusterPipeline_grouped/TE_counts_normalized/multiple/"
+path <- "/Volumes/MyPassport/TBI/13.07.21/3_mergeSamples/clusterPipeline_grouped/TE_counts_normalized/multiple/"
 files <- list.files(path)[which(grepl("TE_norm_cluster_size_matrix.csv", list.files(path)))]
 counts <- list()
 for(file in files){
@@ -317,6 +316,7 @@ ggplot(seq109_l1, aes(x=cellType, y=log2(value+0.5), fill=cellType)) + geom_boxp
   labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") 
 # dev.off()
 
+
 seq109_l1$neurons <- ifelse(endsWith(as.character(seq109_l1$cellType), "neurons"), "Neurons", "Glia")
 seq109_l1 <- seq109_l1[which(seq109_l1$cellType != "Microglia"),]
 # pdf("/Volumes/My Passport/FetalCortex/manuscript/January2022/plots/young_old_L1s_adult_neurons_glia.pdf", width=14)
@@ -331,6 +331,33 @@ ggplot(seq109_l1, aes(x=neurons, y=log2(value+0.5), fill=neurons)) + geom_boxplo
         axis.ticks.x=element_blank())  +
   labs(fill = "Cell type", y= "log2(Normalized cluster\nexpression + 0.5)") 
 # dev.off()
+seq109_l1 <- seq109_l1[which(seq109_l1$te_id %in% c("L1HS:L1:LINE", "L1PA2:L1:LINE", "L1PA3:L1:LINE", "L1PA4:L1:LINE")),]
+pdf("/Volumes/MyPassport/FetalCortex/manuscript/June2023/adult_L1_boxplots_celltype.pdf", width = 10)
+ggplot(seq109_l1, aes(x=neurons, y=log2(value+0.5), fill=cellType, colour=cellType)) + geom_boxplot() +
+  geom_point(position=position_jitterdodge(jitter.height = 0, jitter.width = 0.1),alpha=0.3) +
+  stat_compare_means(comparisons = list(c("Neurons", "Glia")), method = "wilcox") +
+  theme_classic() +
+  facet_wrap(.~te_id, ncol = 2, scales = "free_y") +
+  theme(text = element_text(size=18),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_text(size=15),
+        strip.text.x = element_text(size=15),
+        axis.ticks.x=element_blank()) +
+  scale_fill_manual(values= c("Oligodendrocytes" = "#A8DB94",
+                              "Astrocytes" = "#FEEC9F",
+                              "Excitatory neurons" = "#D53E4F",
+                              "Inhibitory neurons" = "#9c64b0",
+                              "Microglia" = "#3288BD",
+                              "OPC" = "#FC9D63")) +
+  scale_colour_manual(values= c("Oligodendrocytes" = "#3b6e26",
+                              "Astrocytes" = "#8c7924",
+                              "Excitatory neurons" = "#661721",
+                              "Inhibitory neurons" = "#582a69",
+                              "Microglia" = "#10405e",
+                              "OPC" = "#783d19")) +
+  labs(fill = "Cell type", y= "log2(mean (Normalized cluster\nexpression) + 0.5)")  
+dev.off()
 ```
 
 Here we want to compare the expression levels from young vs old L1s in a sample
